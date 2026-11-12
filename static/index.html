@@ -49,7 +49,7 @@ const Store = (() => {
   };
 })();
 
-const CHAVE = 'portal-freio-v19';
+const CHAVE = 'portal-freio-v20';
 
 /* seis categorias oficiais — Art. 3º e 4º do regulamento do ciclo 2027 */
 const CATEGORIAS = [
@@ -576,7 +576,7 @@ function gerarBase() {
   const S = {
     versao: 6,
     demo: false,
-    cicloAtivo: '2026',
+    cicloAtivo: '2027',
     ciclos: [],
     nucleos: [], jurados: [],
     cavalos: [], ginetes: [], eventos: [], inscricoes: [], notas: [], sessoes: [], resultados: [],
@@ -1640,6 +1640,14 @@ a.chip:hover{text-decoration:none;border-color:var(--couro)}
 .menu-admin .tit{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--texto-fraco);
   padding:10px 11px 4px;font-weight:700}
 
+/* Aviso de ciclo em andamento (home) */
+.aviso-ciclo{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;
+  background:#f3f7fb;border:1px solid #cfdcea;border-left:4px solid var(--azul);border-radius:10px;
+  padding:11px 14px;margin:14px 0;font-size:13.5px;color:#243b53}
+.aviso-ciclo b{color:var(--azul)}
+.aviso-ciclo a{font-weight:600;white-space:nowrap}
+@media(max-width:560px){.aviso-ciclo{font-size:13px;padding:10px 12px}}
+
 /* formulários */
 .form{display:grid;gap:12px}
 .form .linha-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
@@ -2348,6 +2356,19 @@ function pgInicio(el, r) {
     <span><b>${num(new Set(S.inscricoes.filter(i => i.ciclo === cicloOk && i.eventoId !== 'ev-final-2026').map(i => i.gineteId)).size)}</b> ginetes</span>
     <span class="fi-fonte">${esc((c || {}).doc || '')}</span>
   </div>
+
+  ${(() => {
+    /* ciclo em andamento: só avisa quando o ranking ainda é parcial, para a
+       home não parecer vazia. Não inventa número — mostra o total real. */
+    const total = conteudo.length;
+    if (total > 40) return '';
+    const anterior = disp.filter(x => x.id !== cicloOk).sort((a, b) => b.id.localeCompare(a.id))[0];
+    const nAnt = anterior ? S.resultados.filter(x => x.ciclo === anterior.id && x.origem !== 'final').length : 0;
+    return `<div class="aviso-ciclo">
+      <span><b>Ciclo ${esc(cicloOk)} em andamento</b> — ${num(total)} conjunto${total === 1 ? '' : 's'} publicado${total === 1 ? '' : 's'} até agora.</span>
+      ${anterior && nAnt ? `<a href="#/inicio?ciclo=${esc(anterior.id)}">Ver ciclo ${esc(anterior.id)} (${num(nAnt)}) →</a>` : ''}
+    </div>`;
+  })()}
 
   <div class="grid g-cat">
     ${CATEGORIAS.map(cat => {
@@ -3283,8 +3304,9 @@ function pgCiclo(el, r) {
 
 /* ---------------- COMPETIDORES ---------------- */
 /* estatísticas completas de um ginete: o que se pode afirmar com a fonte */
-function statsGinete(gineteId) {
-  const ins = S.inscricoes.filter(i => i.gineteId === gineteId);
+function statsGinete(gineteId, ciclo) {
+  /* sem ciclo, conta a carreira inteira (todos os ciclos) */
+  const ins = S.inscricoes.filter(i => i.gineteId === gineteId && (!ciclo || i.ciclo === ciclo));
   const pares = ins.map(i => ({ ins: i, res: Motor.resultadoDe(i.id), ev: eventoDe(i.eventoId) })).filter(x => x.res);
   const notas = pares.map(x => x.res.media).filter(v => v != null);
   const pontos = pares.map(x => x.res.pontos || 0);
@@ -3374,10 +3396,13 @@ function pgCompetidores(el, r) {
   const cat = r.params.categoria || '';
   const ordem = r.params.ordem || 'nota';
   const pagina = paginaAtual(r.params);
+  /* ciclo: vazio = todos os ciclos (sem filtro, como antes) */
+  const ciclo = r.params.ciclo || '';
 
   const base = S.ginetes.filter(g => (!q || norm(g.nome).includes(q) || norm(g.cidade || '').includes(q))
-    && (!cat || S.inscricoes.some(i => i.gineteId === g.id && i.categoriaId === cat)))
-    .map(g => ({ ...g, st: statsGinete(g.id) }));
+    && (!cat || S.inscricoes.some(i => i.gineteId === g.id && i.categoriaId === cat))
+    && (!ciclo || S.inscricoes.some(i => i.gineteId === g.id && i.ciclo === ciclo)))
+    .map(g => ({ ...g, st: statsGinete(g.id, ciclo) }));
 
   const cmp = {
     nota: (a, b) => (b.st.melhor || 0) - (a.st.melhor || 0) || a.nome.localeCompare(b.nome, 'pt-BR'),
@@ -3399,11 +3424,22 @@ function pgCompetidores(el, r) {
   if (q) partes.push('q=' + encodeURIComponent(q));
   if (cat) partes.push('categoria=' + cat);
   if (ordem !== 'nota') partes.push('ordem=' + ordem);
+  if (ciclo) partes.push('ciclo=' + ciclo);
   const rotaBase = '#/competidores' + (partes.length ? '?' + partes.join('&') : '');
+
+  /* monta um endereço trocando só o ciclo, mantendo busca/categoria/ordem */
+  const linkCiclo = (c) => {
+    const p = [];
+    if (q) p.push('q=' + encodeURIComponent(q));
+    if (cat) p.push('categoria=' + cat);
+    if (ordem !== 'nota') p.push('ordem=' + ordem);
+    if (c) p.push('ciclo=' + c);
+    return '#/competidores' + (p.length ? '?' + p.join('&') : '');
+  };
 
   el.innerHTML = `
   <div class="cab-pagina"><div class="ol">Início / Competidores</div><h1>Competidores</h1>
-  <p>${num(S.ginetes.length)} ginetes no ciclo ${esc(S.cicloAtivo)}. Cada ficha reúne os cavalos montados, o histórico e as estatísticas de colocação.</p></div>
+  <p>${ciclo ? `${num(base.length)} ginetes no ciclo ${esc(ciclo)}` : `${num(S.ginetes.length)} ginetes em todos os ciclos`}. Cada ficha reúne os cavalos montados, o histórico e as estatísticas de colocação.</p></div>
 
   <div class="grid g-kpi mb">
     ${kpi(base.length, 'Competidores', 'neste filtro')}
@@ -3417,8 +3453,12 @@ function pgCompetidores(el, r) {
       ${campoBusca('bComp', r.params.q || '', 'Nome do competidor…')}
     </div>
     <div class="chips mt-sm">
-      <a class="chip ${!cat ? 'on' : ''}" href="#/competidores">Todas as categorias</a>
-      ${CATEGORIAS.map(c => `<a class="chip ${cat === c.id ? 'on' : ''}" href="#/competidores?categoria=${c.id}">${esc(c.nome)}</a>`).join('')}
+      <a class="chip ${!ciclo ? 'on' : ''}" href="${linkCiclo('')}">Todos os ciclos</a>
+      ${ciclosDisponiveis().map(c => `<a class="chip ${ciclo === c.id ? 'on' : ''}" href="${linkCiclo(c.id)}">${esc(c.nome.replace('Ciclo ', ''))}</a>`).join('')}
+    </div>
+    <div class="chips mt-sm">
+      <a class="chip ${!cat ? 'on' : ''}" href="${linkCiclo(ciclo)}">Todas as categorias</a>
+      ${CATEGORIAS.map(c => `<a class="chip ${cat === c.id ? 'on' : ''}" href="${(() => { const p = []; if (q) p.push('q=' + encodeURIComponent(q)); p.push('categoria=' + c.id); if (ordem !== 'nota') p.push('ordem=' + ordem); if (ciclo) p.push('ciclo=' + ciclo); return '#/competidores?' + p.join('&'); })()}">${esc(c.nome)}</a>`).join('')}
     </div>
     <div class="linha mt-sm" style="gap:6px;align-items:center">
       <span class="mini fraco" style="margin-right:2px">Ordenar por</span>
@@ -3615,24 +3655,51 @@ function pgCompetidor(el, r) {
 function pgCavalos(el, r) {
   const q = norm(r.params.q || '');
   const sexo = r.params.sexo || '';
+  /* ciclo: vazio = todos os ciclos (sem filtro, como antes) */
+  const ciclo = r.params.ciclo || '';
   const lista = S.cavalos.filter(c => !c.ancestral)
-    .filter(c => (!q || norm(c.nome).includes(q) && true || norm(c.registro).includes(q) || norm(c.criador).includes(q) || norm(c.afixo).includes(q)))
     .filter(c => (!q || norm(c.nome).includes(q) || norm(c.registro).includes(q) || norm(c.criador).includes(q) || norm(c.afixo).includes(q)))
-    .filter(c => !sexo || c.sexo === sexo);
+    .filter(c => !sexo || c.sexo === sexo)
+    .filter(c => !ciclo || (c.ciclos || []).includes(ciclo));
 
   const pagina = paginaAtual(r.params);
   const pg = paginar(lista, pagina);
-  const rotaBase = '#/cavalos' + (r.params.q ? '?q=' + encodeURIComponent(r.params.q) : (sexo ? '?sexo=' + sexo : ''));
+  /* mantém busca, sexo e ciclo ao paginar */
+  const partesCav = [];
+  if (r.params.q) partesCav.push('q=' + encodeURIComponent(r.params.q));
+  if (sexo) partesCav.push('sexo=' + sexo);
+  if (ciclo) partesCav.push('ciclo=' + ciclo);
+  const rotaBase = '#/cavalos' + (partesCav.length ? '?' + partesCav.join('&') : '');
+
+  /* troca só o ciclo, mantendo busca e sexo */
+  const linkCicloCav = (c) => {
+    const p = [];
+    if (r.params.q) p.push('q=' + encodeURIComponent(r.params.q));
+    if (sexo) p.push('sexo=' + sexo);
+    if (c) p.push('ciclo=' + c);
+    return '#/cavalos' + (p.length ? '?' + p.join('&') : '');
+  };
+  const linkSexoCav = (sx) => {
+    const p = [];
+    if (r.params.q) p.push('q=' + encodeURIComponent(r.params.q));
+    if (sx) p.push('sexo=' + sx);
+    if (ciclo) p.push('ciclo=' + ciclo);
+    return '#/cavalos' + (p.length ? '?' + p.join('&') : '');
+  };
 
   el.innerHTML = `
   <div class="cab-pagina"><div class="ol">Início / Cavalos</div><h1>Cavalos</h1>
-  <p>${num(S.cavalos.filter(c => !c.ancestral).length)} animais no ciclo ${esc(S.cicloAtivo)}. Ficha por nome, com histórico de apresentações por ginete e categoria.</p></div>
+  <p>${ciclo ? `${num(lista.length)} animais no ciclo ${esc(ciclo)}` : `${num(S.cavalos.filter(c => !c.ancestral).length)} animais em todos os ciclos`}. Ficha por nome, com histórico de apresentações por ginete e categoria.</p></div>
   <div class="card">
     ${campoBusca('bCav', r.params.q || '', 'Nome, registro ABCCC, afixo ou criador…')}
     <div class="chips mt-sm">
-      <a class="chip ${!sexo ? 'on' : ''}" href="#/cavalos">Todos</a>
-      <a class="chip ${sexo === 'macho' ? 'on' : ''}" href="#/cavalos?sexo=macho">Machos</a>
-      <a class="chip ${sexo === 'fêmea' ? 'on' : ''}" href="#/cavalos?sexo=fêmea">Fêmeas</a>
+      <a class="chip ${!ciclo ? 'on' : ''}" href="${linkCicloCav('')}">Todos os ciclos</a>
+      ${ciclosDisponiveis().map(c => `<a class="chip ${ciclo === c.id ? 'on' : ''}" href="${linkCicloCav(c.id)}">${esc(c.nome.replace('Ciclo ', ''))}</a>`).join('')}
+    </div>
+    <div class="chips mt-sm">
+      <a class="chip ${!sexo ? 'on' : ''}" href="${linkSexoCav('')}">Todos</a>
+      <a class="chip ${sexo === 'macho' ? 'on' : ''}" href="${linkSexoCav('macho')}">Machos</a>
+      <a class="chip ${sexo === 'fêmea' ? 'on' : ''}" href="${linkSexoCav('fêmea')}">Fêmeas</a>
     </div>
   </div>
   <div class="linha entre mt mb">
@@ -3652,7 +3719,13 @@ function pgCavalos(el, r) {
   </div>
   ${pg.total > 1 ? `<div class="card mt">${paginador(pg, rotaBase)}</div>` : ''}`;
   const b = $('#bCav');
-  b.onkeydown = (e) => { if (e.key === 'Enter') navegar('#/cavalos?q=' + encodeURIComponent(b.value.trim())); };
+  b.onkeydown = (e) => {
+    if (e.key !== 'Enter') return;
+    const p = ['q=' + encodeURIComponent(b.value.trim())];
+    if (sexo) p.push('sexo=' + sexo);
+    if (ciclo) p.push('ciclo=' + ciclo);
+    navegar('#/cavalos?' + p.join('&'));
+  };
 }
 
 function pgCavalo(el, r) {
