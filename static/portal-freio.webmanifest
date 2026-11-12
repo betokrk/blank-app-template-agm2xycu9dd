@@ -1,0 +1,16 @@
+{
+  "name": "Portal Freio do Proprietário",
+  "short_name": "Freio",
+  "description": "Rankings, provas, resultados, cavalos e ginetes do Freio do Proprietário.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#142a44",
+  "theme_color": "#142a44",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%231b3a5c'/%3E%3Ccircle cx='256' cy='256' r='150' fill='none' stroke='%23b8862b' stroke-width='34'/%3E%3Ctext x='256' y='320' font-family='Georgia,serif' font-size='170' fill='%23fff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

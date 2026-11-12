@@ -245,6 +245,41 @@ def banner_clique(bid):
     return jsonify(ok=True)
 
 
+@app.post("/api/busca")
+def busca_log():
+    d = request.get_json(silent=True) or {}
+    termo = (d.get("termo") or "").strip()[:60]
+    if termo:
+        executar("insert into busca_log (termo) values (%s)", (termo,))
+        db().commit()
+    return jsonify(ok=True)
+
+
+@app.get("/api/config")
+def config_publica():
+    c = consultar("select logo_url, logo_letra, nome_exibido from config_portal where id=1", um=True)
+    return jsonify(c or {})
+
+
+@app.put("/api/admin/config")
+@exige(*PAPEIS_ESCRITA)
+def admin_config_salvar():
+    d = request.get_json(silent=True) or {}
+    antes = consultar("select * from config_portal where id=1", um=True)
+    executar("""
+        insert into config_portal (id, logo_url, logo_letra, nome_exibido, atualizado_em)
+        values (1,%s,%s,%s, now())
+        on conflict (id) do update set
+          logo_url = coalesce(excluded.logo_url, config_portal.logo_url),
+          logo_letra = coalesce(excluded.logo_letra, config_portal.logo_letra),
+          nome_exibido = coalesce(excluded.nome_exibido, config_portal.nome_exibido),
+          atualizado_em = now()""",
+        (d.get("logo_url"), d.get("logo_letra"), d.get("nome_exibido")))
+    auditar("editar", "config_portal", 1, antes, d, "Logo do portal")
+    db().commit()
+    return jsonify(ok=True)
+
+
 @app.post("/api/visita")
 def visita():
     d = request.get_json(silent=True) or {}

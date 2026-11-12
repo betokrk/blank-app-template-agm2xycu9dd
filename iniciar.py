@@ -55,22 +55,39 @@ def versao_atual(con):
         return cur.fetchone()[0]
 
 
+# Trava de aviso do PostgreSQL: um número fixo que só uma sessão segura por vez.
+# O gunicorn sobe 2 workers e cada um executa esta preparação no boot; sem a
+# trava, os dois leriam "versão 2" e aplicariam a mesma migração ao mesmo tempo
+# (create table if not exists NÃO é seguro em execução simultânea).
+TRAVA_MIGRACAO = 728193465
+
+
 def aplica_migracoes(con):
-    """Aplica os .sql de db/ em ordem. Cada um roda uma vez."""
-    arquivos = sorted(f for f in os.listdir(DB) if f.endswith(".sql"))
-    aplicadas = versao_atual(con)
-    for arq in arquivos:
-        n = int(re.match(r"(\d+)", arq).group(1))
-        if n <= aplicadas:
-            continue
-        log(f"aplicando migração {arq}")
-        sql = open(os.path.join(DB, arq), encoding="utf-8").read()
-        with con.cursor() as cur:
-            cur.execute(sql)
-            cur.execute("""
-                insert into schema_version (versao, arquivo)
-                values (%s,%s) on conflict (versao) do nothing""", (n, arq))
-        con.commit()
+    """Aplica os .sql de db/ em ordem. Cada um roda uma vez, e um por vez."""
+    with con.cursor() as cur:
+        cur.execute("select pg_advisory_lock(%s)", (TRAVA_MIGRACAO,))
+    try:
+        arquivos = sorted(f for f in os.listdir(DB) if f.endswith(".sql"))
+        # relê DENTRO da trava: o outro worker pode ter acabado de aplicar
+        aplicadas = versao_atual(con)
+        for arq in arquivos:
+            n = int(re.match(r"(\d+)", arq).group(1))
+            if n <= aplicadas:
+                continue
+            log(f"aplicando migração {arq}")
+            sql = open(os.path.join(DB, arq), encoding="utf-8").read()
+            with con.cursor() as cur:
+                cur.execute(sql)
+                cur.execute("""
+                    insert into schema_version (versao, arquivo)
+                    values (%s,%s) on conflict (versao) do nothing""", (n, arq))
+            con.commit()
+    finally:
+        try:
+            with con.cursor() as cur:
+                cur.execute("select pg_advisory_unlock(%s)", (TRAVA_MIGRACAO,))
+        except Exception:
+            pass
 
 
 def base_vazia(con):
