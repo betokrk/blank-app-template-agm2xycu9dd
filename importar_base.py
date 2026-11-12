@@ -21,7 +21,14 @@ import unicodedata
 import os
 
 RAIZ = pathlib.Path(__file__).resolve().parent
-BASE = RAIZ.parent / "portal-freio3" / "src" / "app-1-base.js"
+
+# A base oficial vem embutida no próprio site (static/index.html), que já é
+# publicado junto. Assim o servidor não depende de arquivo que só existe na
+# máquina de quem gerou o app.
+FONTES_BASE = [
+    RAIZ / "static" / "index.html",
+    RAIZ.parent / "portal-freio3" / "src" / "app-1-base.js",
+]
 
 
 def norm(s):
@@ -76,9 +83,20 @@ def mesma_pessoa(a, b):
 
 
 def ler_base():
-    txt = BASE.read_text(encoding="utf-8")
-    i = txt.index("const BASE_OFICIAL = ") + len("const BASE_OFICIAL = ")
-    return json.loads(txt[i:].rstrip().rstrip(";"))
+    """Lê BASE_OFICIAL de onde ela estiver: o site publicado ou a fonte."""
+    for caminho in FONTES_BASE:
+        if not caminho.exists():
+            continue
+        txt = caminho.read_text(encoding="utf-8")
+        marca = "const BASE_OFICIAL = "
+        if marca not in txt:
+            continue
+        i = txt.index(marca) + len(marca)
+        # raw_decode pega só o objeto JSON e ignora o resto do arquivo
+        obj, _ = json.JSONDecoder().raw_decode(txt[i:].lstrip())
+        return obj
+    raise RuntimeError(
+        "não encontrei BASE_OFICIAL em " + ", ".join(str(c) for c in FONTES_BASE))
 
 
 CATS = [
