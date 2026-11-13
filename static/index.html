@@ -1249,8 +1249,13 @@ const Motor = (() => {
 
   function mediaProva(inscricaoId) {
     const { etapas, divisor } = etapasDaInscricao(inscricaoId);
-    const notas = notasDe(inscricaoId);
-    if (!notas.length || !etapas.length) return null;
+    if (!etapas.length) return null;
+    /* SÓ as médias das etapas que EXISTEM no grupo desta categoria. Sem este
+       filtro, uma inscrição que trocou de categoria A (8 etapas) para B (6)
+       continuava somando as 8 e dividindo por 6 — média inflada. */
+    const ids = new Set(etapas.map(e => e.id));
+    const notas = notasDe(inscricaoId).filter(n => ids.has(n.etapaId));
+    if (!notas.length) return null;
     const soma = notas.reduce((a, n) => a + (notaEtapaValor(n) || 0), 0);
     return Math.round((soma / divisor) * 1000) / 1000;
   }
@@ -1264,7 +1269,9 @@ const Motor = (() => {
 
   function coberturaNotas(inscricaoId) {
     const { etapas } = etapasDaInscricao(inscricaoId);
-    const notas = notasDe(inscricaoId);
+    /* mesma regra do mediaProva: só conta etapa que existe no grupo da categoria */
+    const ids = new Set(etapas.map(e => e.id));
+    const notas = notasDe(inscricaoId).filter(n => ids.has(n.etapaId));
     return { lancadas: notas.length, total: etapas.length, completa: notas.length === etapas.length };
   }
 
@@ -1710,6 +1717,14 @@ nav.menu a.on{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
 .btn.sm{padding:6px 10px;font-size:13px;border-radius:8px}
 .btn.bloco{width:100%;justify-content:center}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn.sec.perigo{background:transparent;border-color:var(--vermelho);color:var(--vermelho)}
+.btn.sec.perigo:hover{background:var(--vermelho);color:#fff;filter:none}
+.acoes-linha{white-space:nowrap;text-align:right}
+.acoes-linha .btn+.btn{margin-left:6px}
+@media(max-width:560px){
+  .acoes-linha .btn{padding:6px 8px;font-size:12px}
+  .acoes-linha .btn+.btn{margin-left:4px}
+}
 .btn-topo{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff;padding:8px 10px;font-size:13.5px;flex:0 0 auto;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 
@@ -2566,7 +2581,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Base oficial de ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-13 11:39 · 4b0d46f</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-13 13:50 · 51f932b</p>
       </div>
     </div>
   </div></footer>`;
@@ -5325,14 +5340,17 @@ function adInscricoes() {
     const rota = '#/admin/inscricoes' + (q ? '?q=' + encodeURIComponent(termo) + '&' : '?');
     return `<p class="mini fraco mt-sm">${num(pg.quantidade)} inscrição(ões)${q ? ' para esta busca' : ''} · ${num(pg.de)}–${num(pg.ate)} nesta página</p>
     <div class="tabela-wrap mt-sm"><table class="tabela">
-      <thead><tr><th>Prova</th><th class="oculta-mobile">Categoria</th><th>Ginete</th><th class="oculta-mobile">Cavalo</th><th></th></tr></thead>
+      <thead><tr><th>Prova</th><th class="oculta-mobile">Categoria</th><th>Ginete</th><th class="oculta-mobile">Cavalo</th><th>Ações</th></tr></thead>
       <tbody>${pg.itens.length ? pg.itens.map(i => `<tr>
         <td><b>${esc((eventoDe(i.eventoId) || {}).nome || '—')}</b>
           <div class="mini fraco">${dataBR((eventoDe(i.eventoId) || {}).dataInicio)} · ${esc(i.ciclo || '')}</div></td>
         <td class="oculta-mobile">${esc(categoriaDe(i.categoriaId).nome)}</td>
         <td>${esc(nomeGinete(i.gineteId))}</td>
         <td class="oculta-mobile">${esc(nomeCavalo(i.cavaloId))}${i.box ? ` <span class="mini fraco">· box ${esc(i.box)}</span>` : ''}</td>
-        <td><button class="btn sec sm" onclick="modalInscricao()" title="Nova inscrição">+</button></td>
+        <td class="acoes-linha">
+          <button class="btn sec sm" onclick="modalEditarInscricao('${i.id}')" title="Editar inscrição">Editar</button>
+          <button class="btn sec sm perigo" onclick="excluirInscricao('${i.id}')" title="Excluir inscrição">Excluir</button>
+        </td>
       </tr>`).join('') : `<tr><td colspan="5">${vazio(q ? 'Nenhuma inscrição para "' + termo + '".' : 'Nenhuma inscrição registrada.')}</td></tr>`}</tbody>
     </table></div>
     ${pg.total > 1 ? paginador(pg, rota, 'pag') : ''}`;
@@ -5473,6 +5491,254 @@ function modalInscricao() {
       nomeGinete(gin) + ' / ' + nomeCavalo(cav), 'Cadastro administrativo', prova.documento);
     salvar(); fecharModal();
     toast('Inscrição criada: ' + nomeGinete(gin) + ' com ' + nomeCavalo(cav) + '.');
+    render();
+  };
+}
+
+/* ---------------------------------------------------------------
+   EDITAR E EXCLUIR INSCRIÇÃO
+
+   Descadastrar não é só tirar a linha da lista: a inscrição carrega
+   média por etapa, classificação e vínculo ginete↔cavalo. A exclusão
+   mostra o que vai junto e só apaga depois da confirmação.
+   --------------------------------------------------------------- */
+function resumoVinculoInscricao(insId) {
+  const notas = S.notas.filter(n => n.inscricaoId === insId).length;
+  const res = S.resultados.find(r => r.inscricaoId === insId);
+  return {
+    notas,
+    temResultado: !!res,
+    oficial: !!(res && res.selo === 'oficial'),
+    posicao: res ? res.posicao : null,
+    media: res ? res.media : null
+  };
+}
+
+function excluirInscricao(insId) {
+  const ins = porId(S.inscricoes, insId);
+  if (!ins) return toast('Inscrição não encontrada.', 'erro');
+  const prova = eventoDe(ins.eventoId) || {};
+  const v = resumoVinculoInscricao(insId);
+
+  const consequencias = [];
+  if (v.notas) consequencias.push(`${v.notas} média(s) de etapa lançada(s) nesta inscrição`);
+  if (v.temResultado) consequencias.push(`a classificação da prova (${v.posicao != null ? v.posicao + 'º' : 'sem posição'}${v.media != null ? ' · média ' + num(v.media, 3) : ''})`);
+  if (v.oficial) consequencias.push('<b>um resultado marcado como OFICIAL</b>');
+
+  abrirModal(`<div class="linha entre"><h3>Descadastrar inscrição</h3><button class="fechar" onclick="fecharModal()">×</button></div>
+    <p class="pequeno mt-sm">${esc(prova.nome || 'Prova')} · ${esc(categoriaDe(ins.categoriaId).nome)}</p>
+    <p><b>${esc(nomeGinete(ins.gineteId))}</b> com <b>${esc(nomeCavalo(ins.cavaloId))}</b>${ins.box ? ' · box ' + esc(ins.box) : ''}</p>
+    ${consequencias.length ? `<div class="aviso aviso-atencao">Ao descadastrar, também sai:<br>${consequencias.join('<br>')}.</div>` : ''}
+    ${v.oficial ? `<div class="aviso aviso-atencao"><b>Atenção:</b> este resultado veio de documento oficial. Descadastrar aqui <b>não</b> altera o ranking publicado — só retira a inscrição desta prova dentro do portal.</div>` : ''}
+    <div class="campo mt"><label>Motivo (vai para a auditoria)</label>
+      <input id="excMotivo" placeholder="ex.: inscrição duplicada"></div>
+    <div class="form-acoes">
+      <button class="btn perigo" onclick="confirmarExclusaoInscricao('${insId}')">Descadastrar</button>
+      <button class="btn sec" onclick="fecharModal()">Cancelar</button>
+    </div>`);
+}
+
+function confirmarExclusaoInscricao(insId) {
+  const ins = porId(S.inscricoes, insId);
+  if (!ins) return;
+  const prova = eventoDe(ins.eventoId) || {};
+  const motivo = (($('#excMotivo') || {}).value || '').trim() || 'Descadastro pelo painel';
+  const v = resumoVinculoInscricao(insId);
+
+  /* guarda o que sai, para a auditoria não depender da memória */
+  Motor.auditar('Descadastro de inscrição',
+    (prova.nome || '') + ' · ' + categoriaDe(ins.categoriaId).nome,
+    nomeGinete(ins.gineteId) + ' / ' + nomeCavalo(ins.cavaloId),
+    '', motivo, prova.documento || '');
+  if (v.notas) Motor.auditar('Médias removidas com a inscrição', insId, v.notas + ' média(s)', '', motivo, prova.documento || '');
+
+  S.notas = S.notas.filter(n => n.inscricaoId !== insId);
+  S.resultados = S.resultados.filter(r => r.inscricaoId !== insId);
+  S.inscricoes = S.inscricoes.filter(i => i.id !== insId);
+
+  /* o vínculo ginete↔cavalo só cai quando não existe mais nenhuma inscrição
+     daquele par — o animal pode estar com a mesma pessoa em outra prova */
+  const aindaTemPar = S.inscricoes.some(i => i.gineteId === ins.gineteId && i.cavaloId === ins.cavaloId);
+  if (!aindaTemPar) {
+    const g = gineteDe(ins.gineteId);
+    if (g && Array.isArray(g.cavalosIds)) {
+      g.cavalosIds = g.cavalosIds.filter(c => c !== ins.cavaloId);
+    }
+  }
+
+  recalcularProva(ins.eventoId);
+  salvar(); fecharModal();
+  toast('Inscrição descadastrada: ' + nomeGinete(ins.gineteId) + ' com ' + nomeCavalo(ins.cavaloId) + '.');
+  render();
+}
+
+function modalEditarInscricao(insId) {
+  const ins = porId(S.inscricoes, insId);
+  if (!ins) return toast('Inscrição não encontrada.', 'erro');
+  const prova = eventoDe(ins.eventoId) || {};
+  const v = resumoVinculoInscricao(insId);
+
+  abrirModal(`<div class="linha entre"><h3>Editar inscrição</h3><button class="fechar" onclick="fecharModal()">×</button></div>
+    <p class="pequeno mt-sm">${esc(prova.nome || 'Prova')} · ${esc(dataBR(prova.dataInicio))} · ciclo ${esc(ins.ciclo || '')}</p>
+    <form class="form mt-sm" id="fEditIns">
+      <div class="linha-form">
+        <div class="campo"><label>Categoria *</label><select id="eInsCat">
+          ${CATEGORIAS.map(c => `<option value="${c.id}" ${c.id === ins.categoriaId ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}
+        </select></div>
+        <div class="campo"><label>Box</label><input id="eInsBox" inputmode="numeric" value="${esc(ins.box || '')}" placeholder="opcional"></div>
+      </div>
+
+      <div class="campo"><label>Ginete *</label>
+        ${seletorBusca('eInsGin', S.ginetes, {
+          valor: ins.gineteId,
+          placeholder: 'Digite o nome do ginete…',
+          rotulo: g => g.nome,
+          extra: g => [g.cidade && g.cidade + '/' + (g.uf || ''), g.profissao].filter(Boolean).join(' · '),
+          campos: g => [g.nome, g.cidade, g.uf, g.profissao].filter(Boolean).join(' ')
+        })}
+      </div>
+
+      <div class="campo"><label>Cavalo *</label>
+        ${seletorBusca('eInsCav', S.cavalos.filter(c => !c.ancestral), {
+          valor: ins.cavaloId,
+          placeholder: 'Nome, registro, criador, afixo ou proprietário…',
+          rotulo: c => c.nome,
+          extra: c => [c.registro, c.sexo].filter(Boolean).join(' · '),
+          campos: c => [c.nome, c.registro, c.criador, c.afixo, c.proprietario, c.pelagem].join(' ')
+        })}
+      </div>
+
+      <div class="campo"><label>Situação</label><select id="eInsStatus">
+        ${['inscrito', 'classificado', 'desclassificado', 'desistente'].map(s =>
+          `<option value="${s}" ${s === (ins.status || 'inscrito') ? 'selected' : ''}>${s.charAt(0).toUpperCase() + s.slice(1)}</option>`).join('')}
+      </select></div>
+
+      <div id="eInsAviso"></div>
+
+      ${v.notas || v.temResultado ? `<div class="aviso aviso-atencao mini">
+        Esta inscrição já tem ${v.notas} média(s) de etapa${v.temResultado ? ' e classificação' : ''}.
+        Trocar ginete ou cavalo mantém as médias já lançadas — confira a súmula depois.</div>` : ''}
+
+      <div class="form-acoes">
+        <button class="btn verde" type="submit">Salvar alterações</button>
+        <button class="btn sec" type="button" onclick="fecharModal()">Cancelar</button>
+      </div>
+    </form>`);
+
+  ligarSeletorBusca('eInsGin', S.ginetes, {
+    rotulo: g => g.nome,
+    extra: g => [g.cidade && g.cidade + '/' + (g.uf || ''), g.profissao].filter(Boolean).join(' · '),
+    campos: g => [g.nome, g.cidade, g.uf, g.profissao].filter(Boolean).join(' ')
+  });
+  ligarSeletorBusca('eInsCav', S.cavalos.filter(c => !c.ancestral), {
+    rotulo: c => c.nome,
+    extra: c => [c.registro, c.criador].filter(Boolean).join(' · '),
+    campos: c => [c.nome, c.registro, c.criador, c.afixo, c.proprietario, c.pelagem].filter(Boolean).join(' ')
+  });
+
+  /* Avisa ANTES de salvar quando a troca deixa média órfã: categoria A tem
+     8 etapas e B tem 6, então mudar de A para B invalida Campo 1 e Campo 2. */
+  window.conferirEdicaoInscricao = () => {
+    const alvo = $('#eInsAviso');
+    if (!alvo) return;
+    const cat = $('#eInsCat').value;
+    const gin = $('#eInsGin').value;
+    const cav = $('#eInsCav').value;
+    const avisos = [];
+
+    const etapasNovas = new Set((etapasDe(ins.ciclo, cat) || []).map(e => e.id));
+    const orfas = S.notas.filter(n => n.inscricaoId === ins.id && !etapasNovas.has(n.etapaId));
+    if (orfas.length) {
+      avisos.push(`${orfas.length} média(s) de etapa não existem nesta categoria (${orfas.map(n => {
+        const et = (ETAPAS_A.concat(ETAPAS_B)).find(x => x.id === n.etapaId);
+        return et ? et.nome : n.etapaId;
+      }).join(', ')}) e vão deixar de contar na média.`);
+    }
+    if (cat !== ins.categoriaId) {
+      const g = categoriaDe(cat).grupo, ga = categoriaDe(ins.categoriaId).grupo;
+      if (g !== ga) avisos.push(`Trocar do grupo ${ga} (${ga === 'A' ? 8 : 6} etapas) para o grupo ${g} (${g === 'A' ? 8 : 6} etapas) muda a divisão da média.`);
+    }
+    const dup = S.inscricoes.some(i => i.id !== ins.id && i.eventoId === ins.eventoId
+      && i.categoriaId === cat && i.cavaloId === cav);
+    if (dup) avisos.push('Este cavalo já está inscrito nesta categoria da prova.');
+    if (gin && cav && S.inscricoes.some(i => i.id !== ins.id && i.eventoId === ins.eventoId
+      && i.gineteId === gin && i.categoriaId === cat && i.cavaloId !== cav)) {
+      avisos.push('Este ginete já tem outro cavalo nesta categoria da prova.');
+    }
+
+    alvo.innerHTML = avisos.length
+      ? `<div class="aviso aviso-atencao">${avisos.join('<br>')}</div>` : '';
+  };
+  ['eInsCat', 'eInsGin', 'eInsCav'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => setTimeout(conferirEdicaoInscricao, 0));
+  });
+
+  $('#fEditIns').onsubmit = (ev) => {
+    ev.preventDefault();
+    const cat = $('#eInsCat').value;
+    const gin = $('#eInsGin').value;
+    const cav = $('#eInsCav').value;
+    const box = ($('#eInsBox').value || '').trim();
+    const status = $('#eInsStatus').value;
+
+    if (!gin) return toast('Escolha o ginete na busca.', 'erro');
+    if (!cav) return toast('Escolha o cavalo na busca.', 'erro');
+
+    /* duplicidade: mesmo cavalo na mesma categoria da prova, em OUTRA inscrição */
+    const dup = S.inscricoes.some(i => i.id !== insId && i.eventoId === ins.eventoId
+      && i.categoriaId === cat && i.cavaloId === cav);
+    if (dup) return toast('Este cavalo já está inscrito nesta categoria da prova.', 'erro');
+
+    const antes = {
+      categoria: categoriaDe(ins.categoriaId).nome,
+      ginete: nomeGinete(ins.gineteId),
+      cavalo: nomeCavalo(ins.cavaloId),
+      box: ins.box || '',
+      status: ins.status || ''
+    };
+
+    ins.categoriaId = cat;
+    ins.gineteId = gin;
+    ins.cavaloId = cav;
+    ins.box = box || null;
+    ins.status = status;
+    ins.atualizadoEm = hojeISO();
+
+    /* o mesmo par pode existir em outras provas: só remove o vínculo quando
+       não sobrou nenhuma inscrição do ginete antigo com o cavalo antigo */
+    if (antes.ginete !== nomeGinete(gin) || antes.cavalo !== nomeCavalo(cav)) {
+      Motor.auditar('Edição de inscrição', (prova.nome || '') + ' · ' + categoriaDe(cat).nome,
+        antes.ginete + ' / ' + antes.cavalo, nomeGinete(gin) + ' / ' + nomeCavalo(cav),
+        'Correção de inscrição', prova.documento || '');
+    } else if (antes.box !== box || antes.status !== status) {
+      Motor.auditar('Edição de inscrição', (prova.nome || '') + ' · ' + categoriaDe(cat).nome,
+        'box ' + (antes.box || '—') + ' · ' + antes.status,
+        'box ' + (box || '—') + ' · ' + status, 'Correção de inscrição', prova.documento || '');
+    }
+
+    const g = gineteDe(gin);
+    if (g) g.cavalosIds = Array.from(new Set([].concat(g.cavalosIds || [], [cav])));
+    const c = porId(S.cavalos, cav);
+    if (c) {
+      c.ciclos = Array.from(new Set([].concat(c.ciclos || [], [ins.ciclo || prova.ciclo]))).sort();
+      c.categorias = Array.from(new Set([].concat(c.categorias || [], [cat]))).sort();
+    }
+
+    /* limpa média de etapa que não existe na categoria nova (A→B perde Campo) */
+    const etapasValidas = new Set((etapasDe(ins.ciclo, cat) || []).map(e => e.id));
+    const antesNotas = S.notas.length;
+    S.notas = S.notas.filter(n => n.inscricaoId !== ins.id || etapasValidas.has(n.etapaId));
+    const removidas = antesNotas - S.notas.length;
+    if (removidas) {
+      Motor.auditar('Médias removidas por troca de categoria',
+        (prova.nome || '') + ' · ' + categoriaDe(cat).nome, removidas + ' média(s)', '',
+        'Etapa não existe nesta categoria', prova.documento || '');
+    }
+
+    recalcularProva(ins.eventoId);
+    salvar(); fecharModal();
+    toast('Inscrição atualizada.' + (removidas ? ' ' + removidas + ' média(s) de etapa removida(s) por não existirem na categoria escolhida.' : ''));
     render();
   };
 }
