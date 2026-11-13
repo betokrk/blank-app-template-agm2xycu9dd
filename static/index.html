@@ -1641,7 +1641,15 @@ a.chip:hover{text-decoration:none;border-color:var(--couro)}
   padding:10px 11px 4px;font-weight:700}
 
 /* Seletor com busca (admin): escolher 1 entre centenas sem <select> gigante */
+/* o modal .modal tem overflow:auto e cortava a lista suspensa. Com foco no
+   campo, o modal cresce e a lista fica visível inteira. */
+.modal:has(.sb-campo:focus){overflow:visible;max-height:96vh}
+@media(max-height:700px){.modal:has(.sb-campo:focus){overflow:auto}}
+
+
 .sb{position:relative}
+/* a lista suspensa precisa escapar do overflow do modal */
+.modal:has(.sb-campo:focus){overflow-y:auto;overflow-x:visible}
 .sb-campo{width:100%;padding:11px 14px;border:1px solid var(--linha);border-radius:10px;background:#fff;font-size:14.5px}
 .sb-campo:focus{outline:2px solid var(--azul-2);outline-offset:1px;border-color:transparent}
 .sb-lista{position:absolute;z-index:60;left:0;right:0;top:calc(100% + 4px);max-height:min(46vh,300px);overflow-y:auto;
@@ -4863,15 +4871,18 @@ function adInscricoes() {
   const totais = S.inscricoes.slice().reverse();   /* mais recentes primeiro */
 
   const filtrar = (termo) => {
-    const q = norm(termo || '');
-    if (!q) return totais;
-    return totais.filter(i => norm([
-      (eventoDe(i.eventoId) || {}).nome || '',
-      categoriaDe(i.categoriaId).nome,
-      nomeGinete(i.gineteId),
-      nomeCavalo(i.cavaloId),
-      i.status || ''
-    ].join(' ')).includes(q));
+    const palavras = norm(termo || '').split(/\s+/).filter(Boolean);
+    if (!palavras.length) return totais;
+    return totais.filter(i => {
+      const alvo = norm([
+        (eventoDe(i.eventoId) || {}).nome || '',
+        categoriaDe(i.categoriaId).nome,
+        nomeGinete(i.gineteId),
+        nomeCavalo(i.cavaloId),
+        i.status || ''
+      ].join(' '));
+      return palavras.every(p => alvo.includes(p));
+    });
   };
 
   const corpo = (termo, pagina) => {
@@ -4928,15 +4939,18 @@ function modalInscricao() {
         ${seletorBusca('insGin', ginetes, {
           placeholder: 'Digite o nome do ginete…',
           rotulo: g => g.nome,
-          extra: g => [g.cidade && g.cidade + '/' + (g.uf || ''), g.profissao].filter(Boolean).join(' · ')
+          extra: g => [g.cidade && g.cidade + '/' + (g.uf || ''), g.profissao].filter(Boolean).join(' · '),
+          campos: g => [g.nome, g.cidade, g.uf, g.profissao].filter(Boolean).join(' ')
         })}
       </div>
 
       <div class="campo"><label>Cavalo *</label>
         ${seletorBusca('insCav', cavalos, {
-          placeholder: 'Nome, registro, criador ou afixo…',
+          placeholder: 'Nome, registro, criador, afixo ou proprietário…',
           rotulo: c => c.nome,
-          extra: c => [c.registro, c.sexo, c.pelagem].filter(Boolean).join(' · ')
+          extra: c => [c.registro, c.sexo].filter(Boolean).join(' · '),
+          /* o que a busca considera além do rótulo: registro, criador, afixo, proprietário */
+          campos: c => [c.nome, c.registro, c.criador, c.afixo, c.proprietario, c.pelagem].join(' ')
         })}
       </div>
 
@@ -4949,9 +4963,15 @@ function modalInscricao() {
       </div>
     </form>`);
 
-  ligarSeletorBusca('insGin', ginetes, { rotulo: g => g.nome, extra: g => g.cidade || '' });
+  ligarSeletorBusca('insGin', ginetes, {
+    rotulo: g => g.nome,
+    extra: g => [g.cidade && g.cidade + '/' + (g.uf || ''), g.profissao].filter(Boolean).join(' · '),
+    campos: g => [g.nome, g.cidade, g.uf, g.profissao].filter(Boolean).join(' ')
+  });
   ligarSeletorBusca('insCav', cavalos, {
-    rotulo: c => c.nome, extra: c => c.registro || '',
+    rotulo: c => c.nome,
+    extra: c => [c.registro, c.criador].filter(Boolean).join(' · '),
+    campos: c => [c.nome, c.registro, c.criador, c.afixo, c.proprietario, c.pelagem].filter(Boolean).join(' '),
     aoEscolher: () => conferirInscricao()
   });
 
@@ -5040,7 +5060,15 @@ function adSumulas() {
 function corpoSumula(evId) {
   const e = eventoDe(evId);
   if (!e) return vazio('Selecione uma prova.');
-  const ins = S.inscricoes.filter(i => i.eventoId === evId);
+  /* ordem ESTÁVEL: por categoria e nome. Antes a lista vinha na ordem do
+     vetor e parecia que as linhas trocavam de lugar ao salvar. */
+  const ins = S.inscricoes.filter(i => i.eventoId === evId)
+    .slice()
+    .sort((a, b) => {
+      const ca = categoriaDe(a.categoriaId).ordem || 0, cb = categoriaDe(b.categoriaId).ordem || 0;
+      if (ca !== cb) return ca - cb;
+      return nomeGinete(a.gineteId).localeCompare(nomeGinete(b.gineteId), 'pt-BR');
+    });
   const temA = ins.some(i => (categoriaDe(i.categoriaId).grupo || 'A') === 'A');
   const temB = ins.some(i => (categoriaDe(i.categoriaId).grupo || 'A') === 'B');
 
@@ -5064,8 +5092,9 @@ function corpoSumula(evId) {
               const n = notas.find(x => x.etapaId === et.id);
               return `<div class="nt-cel">
                 <div class="nt-rot" title="${esc(et.nome)}">${esc(abreviarEtapa(et.nome))}</div>
-                <input class="inp-nota" data-ins="${i.id}" data-etapa="${et.id}" type="number" step="0.01" min="0" max="10"
-                  value="${n ? n.valor : ''}" placeholder="—" aria-label="${esc(et.nome)}">
+                <input class="inp-nota" data-ins="${i.id}" data-etapa="${et.id}" type="text" inputmode="decimal"
+                  autocomplete="off" value="${n ? (n.bruta != null ? n.bruta : n.valor) : ''}" placeholder="—"
+                  aria-label="${esc(et.nome)}">
               </div>`;
             }).join('')}
           </div>
@@ -5078,8 +5107,16 @@ function corpoSumula(evId) {
     </div>`;
   };
 
+  const ehOficial = ins.some(i => {
+    const r = S.resultados.find(x => x.inscricaoId === i.id);
+    return r && r.selo === 'oficial' && r.media != null;
+  });
   return `<p class="pequeno">Prova <b>${esc(e.nome)}</b> · ciclo ${esc(e.ciclo)} · ${ins.length} inscrições · ${selo(e.selo)}</p>
-    <div class="aviso aviso-info">A <b>média</b> é a soma de todas as etapas dividida por <b>8</b> (categorias A) ou <b>6</b> (categorias B) — Art. 11, I.</div>
+    ${ehOficial ? `<div class="aviso aviso-atencao"><b>Esta prova já tem resultado oficial.</b>
+      A digitação de notas aqui fica marcada como provisória e <b>não substitui</b> a média publicada pela ABCCC.
+      Se a intenção é corrigir a oficial, isso é feito na importação do documento, com registro do que veio.</div>` : ''}
+    <div class="aviso aviso-info">A <b>média</b> é a soma de todas as etapas dividida por <b>8</b> (categorias A) ou <b>6</b> (categorias B) — Art. 11, I.
+      Digite com ponto ou vírgula: a nota do jurado vai de 0 a 10.</div>
     ${temA ? bloco(ETAPAS_A, 8, 'A') : ''}
     ${temB ? bloco(ETAPAS_B, 6, 'B') : ''}
     <div class="linha mt">
@@ -5088,45 +5125,125 @@ function corpoSumula(evId) {
     </div>`;
 }
 
+/* Lê o que foi digitado aceitando vírgula (teclado brasileiro).
+   Sem isso, "8,25" virava 825 — fora do intervalo, ou 8,25 lido errado. */
+function lerNotaDigitada(bruto) {
+  const s = String(bruto == null ? '' : bruto).trim();
+  if (!s) return { vazio: true };
+  /* ponto e vírgula mistos, ou separador de milhar: "1.234,5" */
+  let limpo = s;
+  if (s.includes(',') && s.includes('.')) {
+    /* o último separador é o decimal */
+    const ultVirgula = s.lastIndexOf(','), ultPonto = s.lastIndexOf('.');
+    if (ultVirgula > ultPonto) limpo = s.replace(/\./g, '').replace(',', '.');
+    else limpo = s.replace(/,/g, '');
+  } else if (s.includes(',')) {
+    limpo = s.replace(',', '.');
+  }
+  const n = Number(limpo);
+  if (!Number.isFinite(n)) return { erro: 'A nota precisa ser um número.' };
+  if (n < 0 || n > 10) return { erro: 'A nota do jurado vai de 0 a 10.' };
+  return { valor: Math.round(n * 1000) / 1000 };
+}
+
 function salvarNotas(evId) {
   const campos = $$('.inp-nota');
-  let alterados = 0, invalidos = 0;
+  const ev = eventoDe(evId) || {};
+  let alterados = 0;
+  const erros = [];
+
   campos.forEach(inp => {
-    const v = inp.value === '' ? null : Number(inp.value);
-    if (v != null && (isNaN(v) || v < 0 || v > 10)) { invalidos++; return; }
     const ins = inp.dataset.ins, et = inp.dataset.etapa;
+    const lido = lerNotaDigitada(inp.value);
+    if (lido.vazio) return;
+    if (lido.erro) { erros.push(`${inp.value}: ${lido.erro}`); return; }
+
+    const v = lido.valor;
+    /* o peso vem da ETAPA, não fixo em 1: 1,5 na fase inicial e 2 na final.
+       Sem isso a média saía dividida pelo peso errado e mudava de valor. */
+    const etapa = (etapasDe((eventoDe(evId) || {}).ciclo, categoriaDe((porId(S.inscricoes, ins) || {}).categoriaId)) || [])
+      .find(x => x.id === et);
+    const peso = (etapa && etapa.peso) || 1.5;
+
     const existente = S.notas.find(n => n.inscricaoId === ins && n.etapaId === et);
-    if (v == null) return;
     if (existente) {
-      if (Math.abs(existente.valor - v) > 0.0001) {
-        Motor.auditar('Correção de nota', ins + '/' + et, existente.valor, v, 'Conferência de súmula', (eventoDe(evId) || {}).documento || '');
-        existente.valor = v; alterados++;
+      const anterior = existente.bruta != null ? existente.bruta : existente.valor;
+      if (Math.abs(Number(anterior) - v) > 0.0001 || Number(existente.peso) !== peso) {
+        Motor.auditar('Correção de nota', ins + '/' + et, anterior, v, 'Conferência de súmula', ev.documento || '');
+        existente.bruta = v;                 /* o que o jurado deu, 0 a 10 */
+        existente.peso = peso;               /* peso da fase */
+        existente.valor = Math.round(v * peso * 1000) / 1000;  /* nota da etapa */
+        existente.selo = 'provisorio';
+        alterados++;
       }
     } else {
-      S.notas.push({ id: uid('nota'), inscricaoId: ins, etapaId: et, sessaoId: null, valor: v, peso: 1, individual: false, fonte: (eventoDe(evId) || {}).documento || 'Lançamento manual', selo: 'provisorio' });
-      Motor.auditar('Lançamento de nota', ins + '/' + et, '', v, 'Digitação a partir de documento', (eventoDe(evId) || {}).documento || '');
+      S.notas.push({
+        id: uid('nota'), inscricaoId: ins, etapaId: et, sessaoId: null,
+        bruta: v, peso, valor: Math.round(v * peso * 1000) / 1000,
+        individual: false, fonte: ev.documento || 'Lançamento manual', selo: 'provisorio'
+      });
+      Motor.auditar('Lançamento de nota', ins + '/' + et, '', v, 'Digitação a partir de documento', ev.documento || '');
       alterados++;
     }
   });
-  if (invalidos) toast(invalidos + ' nota(s) fora do intervalo 0–10 ignorada(s).', 'erro');
-  /* recalcular totais da prova */
-  recalcularProva(evId);
+
+  if (erros.length) {
+    toast(erros.length === 1 ? erros[0] : erros.length + ' nota(s) não foram aceitas. ' + erros[0], 'erro');
+    return;
+  }
+
+  if (!alterados) { toast('Nenhuma alteração para salvar.'); return; }
+
+  const r = recalcularProva(evId);
   salvar();
-  toast(alterados ? alterados + ' nota(s) atualizada(s). Totais recalculados.' : 'Nenhuma alteração para salvar.');
+  toast(alterados + ' nota(s) salva(s). ' + r.msg);
   render();
 }
+/* Recalcula a prova a partir das notas digitadas.
+   REGRA DE OURO: resultado oficial (selo 'oficial', vindo do PDF da ABCCC)
+   NUNCA é sobrescrito por digitação. Antes, uma única nota lançada trocava
+   a média de 12,720 por 1,031 e a tela continuava dizendo "oficial". */
 function recalcularProva(evId) {
   const ins = S.inscricoes.filter(i => i.eventoId === evId);
+  let atualizados = 0, preservados = 0, criados = 0;
+
   CATEGORIAS.forEach(cat => {
-    const lista = ins.filter(i => i.categoriaId === cat.id).map(i => ({ i, media: Motor.mediaProva(i.id) })).filter(x => x.media != null);
-    lista.sort((a, b) => b.media - a.media);
+    const lista = ins.filter(i => i.categoriaId === cat.id)
+      .map(i => ({ i, media: Motor.mediaProva(i.id) }))
+      .filter(x => x.media != null);
+    lista.sort((a, b) => b.media - a.media || String(a.i.id).localeCompare(String(b.i.id)));
+
     lista.forEach((x, pos) => {
       let res = S.resultados.find(r => r.inscricaoId === x.i.id);
-      if (!res) { res = { id: uid('res'), eventoId: evId, ciclo: x.i.ciclo, categoriaId: cat.id, inscricaoId: x.i.id, origem: 'credenciadora', selo: 'provisorio' }; S.resultados.push(res); }
-      res.media = x.media; res.total = x.media; res.posicao = pos + 1;
+
+      /* já existe e é oficial: não mexe. Só avisa. */
+      if (res && res.selo === 'oficial' && res.media != null) {
+        preservados++;
+        return;
+      }
+
+      if (!res) {
+        res = {
+          id: uid('res'), eventoId: evId, ciclo: x.i.ciclo, categoriaId: cat.id,
+          inscricaoId: x.i.id, origem: 'credenciadora', selo: 'provisorio'
+        };
+        S.resultados.push(res);
+        criados++;
+      }
+      res.media = x.media; res.total = x.media;
+      res.posicao = pos + 1;
       res.pontos = Motor.pontosPorColocacao(pos + 1, lista.length, true);
+      res.selo = res.selo === 'oficial' ? 'oficial' : 'provisorio';
+      res.atualizadoEm = hojeISO();
+      atualizados++;
     });
   });
+
+  const partes = [];
+  if (criados) partes.push(criados + ' resultado(s) novo(s)');
+  if (atualizados) partes.push(atualizados + ' recalculado(s)');
+  if (preservados) partes.push(preservados + ' oficial(is) preservado(s)');
+  return { msg: partes.length ? partes.join(' · ') + '.' : 'Nada a recalcular.', preservados };
 }
 
 /* ---------------- SESSÕES DE JULGAMENTO ---------------- */
@@ -5238,7 +5355,7 @@ function seletorBusca(id, itens, opts) {
   const rotulo = (x) => o.rotulo ? o.rotulo(x) : x.nome;
   const extra = (x) => o.extra ? o.extra(x) : '';
   const inicial = o.valor ? itens.find(x => x.id === o.valor) : null;
-  return `<div class="sb" data-sb="${id}">
+  return `<div class="sb" data-sb="${id}" data-campos="${id}">
     <input class="sb-campo" id="${id}Busca" type="search" autocomplete="off"
            placeholder="${esc(o.placeholder || 'Digite para buscar…')}"
            value="${inicial ? esc(rotulo(inicial)) : ''}">
@@ -5258,7 +5375,18 @@ function ligarSeletorBusca(id, itens, opts) {
   if (!campo || !lista) return;
   const rotulo = (x) => o.rotulo ? o.rotulo(x) : x.nome;
   const extra = (x) => o.extra ? o.extra(x) : '';
+  /* texto que a busca varre: nome + registro + criador + afixo… */
+  const alvo = (x) => (o.campos ? o.campos(x) : (rotulo(x) + ' ' + extra(x)));
   const LIMITE = 30;
+
+  /* Cada palavra digitada precisa aparecer em algum lugar do registro, em
+     qualquer ordem: "pinta sendero" e "sendero pinta" acham o mesmo cavalo.
+     Antes só achava a frase exata na sequência. */
+  const combina = (x, termo) => {
+    const alvoNorm = norm(alvo(x));
+    const palavras = norm(termo).split(/\s+/).filter(Boolean);
+    return palavras.every(pal => alvoNorm.includes(pal));
+  };
 
   const fechar = () => { lista.hidden = true; lista.innerHTML = ''; };
   const escolher = (x) => {
@@ -5272,28 +5400,63 @@ function ligarSeletorBusca(id, itens, opts) {
   const desenhar = (termo) => {
     const q = norm(termo || '');
     /* sem termo: mostra os primeiros, não os 800 */
-    const achados = (q ? itens.filter(x => norm(rotulo(x) + ' ' + extra(x)).includes(q)) : itens).slice(0, LIMITE);
+    const achados = (q ? itens.filter(x => combina(x, termo)) : itens).slice(0, LIMITE);
     if (!achados.length) {
       lista.innerHTML = '<div class="sb-vazio">Nada encontrado. Confira a grafia ou cadastre antes.</div>';
       lista.hidden = false;
+      posicionar();
       return;
     }
-    const total = q ? itens.filter(x => norm(rotulo(x) + ' ' + extra(x)).includes(q)).length : itens.length;
+    const total = q ? itens.filter(x => combina(x, termo)).length : itens.length;
     lista.innerHTML = achados.map(x => `<button type="button" class="sb-item" data-id="${esc(x.id)}">
       <b>${esc(rotulo(x))}</b>${extra(x) ? `<span>${esc(extra(x))}</span>` : ''}</button>`).join('')
       + (total > LIMITE ? `<div class="sb-mais">${num(total - LIMITE)} outro(s) — refine a busca</div>` : '');
     lista.hidden = false;
+    posicionar();
     lista.querySelectorAll('.sb-item').forEach(b => {
       b.onclick = () => escolher(itens.find(x => x.id === b.dataset.id));
     });
+  };
+
+  /* escolhe o lado: abre para baixo, ou para cima quando não couber.
+     O modal tem altura limitada e cortava a lista no fim da tela. */
+  const posicionar = () => {
+    if (lista.hidden) return;
+    const r = campo.getBoundingClientRect();
+    const folga = 12;
+    const abaixo = window.innerHeight - r.bottom - folga;
+    const acima = r.top - folga;
+
+    /* abre para o lado com mais espaço e LIMITA a altura ao espaço real —
+       é isso que impede a lista de passar do fim da tela no celular */
+    if (abaixo >= 200 || abaixo >= acima) {
+      lista.style.top = 'calc(100% + 4px)';
+      lista.style.bottom = 'auto';
+      lista.style.maxHeight = Math.max(140, Math.min(300, abaixo)) + 'px';
+    } else {
+      lista.style.top = 'auto';
+      lista.style.bottom = 'calc(100% + 4px)';
+      lista.style.maxHeight = Math.max(140, Math.min(300, acima)) + 'px';
+    }
   };
 
   campo.oninput = () => {
     oculto.value = '';           /* digitar invalida a escolha anterior */
     escEl.textContent = '';
     desenhar(campo.value);
+    posicionar();
   };
-  campo.onfocus = () => { if (!oculto.value) desenhar(campo.value); };
+  campo.onfocus = () => {
+    if (!oculto.value) desenhar(campo.value);
+    posicionar();
+    /* rola o campo para o meio da tela: assim a lista cabe embaixo */
+    setTimeout(() => {
+      const r = campo.getBoundingClientRect();
+      if (r.top < 90 || r.bottom > window.innerHeight - 200) {
+        campo.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }, 60);
+  };
   campo.onkeydown = (e) => {
     if (e.key === 'Escape') { fechar(); return; }
     if (e.key === 'Enter') {
@@ -5313,9 +5476,14 @@ function telaCadastro(cfg) {
   const totais = cfg.itens();
 
   /* `termo` vazio = lista completa (comportamento antigo preservado) */
+  /* cada palavra digitada precisa aparecer no registro, em qualquer ordem */
   const filtrar = (termo) => {
-    const q = norm(termo || '');
-    return q ? totais.filter(x => norm(cfg.busca(x)).includes(q)) : totais;
+    const palavras = norm(termo || '').split(/\s+/).filter(Boolean);
+    if (!palavras.length) return totais;
+    return totais.filter(x => {
+      const alvo = norm(cfg.busca(x));
+      return palavras.every(p => alvo.includes(p));
+    });
   };
 
   const corpo = (termo, pagina) => {
