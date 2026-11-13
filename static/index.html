@@ -1640,6 +1640,23 @@ a.chip:hover{text-decoration:none;border-color:var(--couro)}
 .menu-admin .tit{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--texto-fraco);
   padding:10px 11px 4px;font-weight:700}
 
+/* Seletor com busca (admin): escolher 1 entre centenas sem <select> gigante */
+.sb{position:relative}
+.sb-campo{width:100%;padding:11px 14px;border:1px solid var(--linha);border-radius:10px;background:#fff;font-size:14.5px}
+.sb-campo:focus{outline:2px solid var(--azul-2);outline-offset:1px;border-color:transparent}
+.sb-lista{position:absolute;z-index:60;left:0;right:0;top:calc(100% + 4px);max-height:min(46vh,300px);overflow-y:auto;
+  background:#fff;border:1px solid var(--linha);border-radius:11px;box-shadow:0 10px 28px rgba(20,42,68,.16)}
+.sb-item{display:block;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid #f1ece1;
+  padding:10px 13px;cursor:pointer;font:inherit;color:inherit}
+.sb-item:last-child{border-bottom:0}
+.sb-item:hover,.sb-item:focus{background:#f5efe2;outline:none}
+.sb-item b{display:block;font-size:14px;font-weight:600}
+.sb-item span{display:block;font-size:12px;color:var(--texto-fraco);margin-top:1px}
+.sb-vazio,.sb-mais{padding:11px 13px;font-size:12.5px;color:var(--texto-fraco)}
+.sb-esc{font-size:12.5px;color:#2f6b46;margin-top:5px;font-weight:600}
+.sb-esc:empty{display:none}
+@media(max-width:560px){.sb-lista{max-height:44vh}}
+
 /* Aviso de ciclo em andamento (home) */
 .aviso-ciclo{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;
   background:#f3f7fb;border:1px solid #cfdcea;border-left:4px solid var(--azul);border-radius:10px;
@@ -4638,9 +4655,22 @@ function modalCiclo(id) {
 
 /* ---------------- PROVAS (admin) ---------------- */
 function adProvas() {
-  return `<div class="card"><div class="linha entre"><h3 style="margin:0">Provas cadastradas</h3>
-      <button class="btn verde sm" onclick="modalProva()">Nova prova</button></div>
-    ${tabela([
+  const params = lerHash().params;
+  const todos = S.eventos.slice().sort((a, b) => String(b.dataInicio).localeCompare(String(a.dataInicio)));
+
+  const filtrar = (termo) => {
+    const q = norm(termo || '');
+    if (!q) return todos;
+    return todos.filter(e => norm([e.nome, e.cidade, e.uf, e.ciclo, e.tipo, e.status].join(' ')).includes(q));
+  };
+
+  const corpo = (termo, pagina) => {
+    const lista = filtrar(termo);
+    const pg = paginar(lista, pagina || paginaAtual(params, 'pag'));
+    const q = norm(termo || '');
+    const rota = '#/admin/provas' + (q ? '?q=' + encodeURIComponent(termo) + '&' : '?');
+    return `<p class="mini fraco mt-sm">${num(pg.quantidade)} prova(s)${q ? ' para esta busca' : ''} · ${num(pg.de)}–${num(pg.ate)} nesta página</p>
+    <div class="mt-sm">${tabela([
       { titulo: 'Prova', render: e => `<b>${esc(e.nome)}</b><div class="mini fraco">${esc(e.cidade)}/${esc(e.uf)} · ${dataBR(e.dataInicio)}</div>` },
       { titulo: 'Ciclo', campo: 'ciclo' },
       { titulo: 'Jurados', render: e => { const s = S.sessoes.filter(x => x.eventoId === e.id);
@@ -4652,10 +4682,20 @@ function adProvas() {
       { titulo: '', render: e => `<button class="btn sec sm" onclick="modalProva('${e.id}')">Editar</button>
         <button class="btn sec sm" onclick="publicarProva('${e.id}')">${e.status === 'publicado' ? 'Republicar' : 'Publicar'}</button>
         <a class="btn sec sm" href="#/prova/${e.id}">Ver</a>` }
-    ], S.eventos.slice().sort((a, b) => b.dataInicio.localeCompare(a.dataInicio)))}
+    ], pg.itens)}</div>
+    ${pg.total > 1 ? paginador(pg, rota, 'pag') : ''}`;
+  };
+
+  setTimeout(() => ligarFiltroAoVivo('prvBusca', 'prvArea', (termo, pag) => corpo(termo, pag)), 0);
+
+  return `<div class="card"><div class="linha entre"><h3 style="margin:0">Provas cadastradas</h3>
+      <button class="btn verde sm" onclick="modalProva()">Nova prova</button></div>
+    <div class="linha mt">${campoBusca('prvBusca', params.q || '', 'Nome, cidade, ciclo ou status…')}</div>
+    <div id="prvArea">${corpo(params.q || '', paginaAtual(params, 'pag'))}</div>
     <div class="fonte-linha">Publicar cria nova versão com data e autor. A versão anterior fica recuperável. As provas importadas do ranking oficial não trazem jurados no documento original — defina a dupla no botão Editar.</div>
   </div>`;
 }
+
 function modalProva(id) {
   const e = id ? eventoDe(id) : null;
   const sessoesDoEvento = e ? S.sessoes.filter(s => s.eventoId === e.id) : [];
@@ -4819,38 +4859,168 @@ function publicarProva(id) {
 
 /* ---------------- INSCRIÇÕES ---------------- */
 function adInscricoes() {
+  const params = lerHash().params;
+  const totais = S.inscricoes.slice().reverse();   /* mais recentes primeiro */
+
+  const filtrar = (termo) => {
+    const q = norm(termo || '');
+    if (!q) return totais;
+    return totais.filter(i => norm([
+      (eventoDe(i.eventoId) || {}).nome || '',
+      categoriaDe(i.categoriaId).nome,
+      nomeGinete(i.gineteId),
+      nomeCavalo(i.cavaloId),
+      i.status || ''
+    ].join(' ')).includes(q));
+  };
+
+  const corpo = (termo, pagina) => {
+    const lista = filtrar(termo);
+    const pg = paginar(lista, pagina || paginaAtual(params, 'pag'));
+    const q = norm(termo || '');
+    const rota = '#/admin/inscricoes' + (q ? '?q=' + encodeURIComponent(termo) + '&' : '?');
+    return `<p class="mini fraco mt-sm">${num(pg.quantidade)} inscrição(ões)${q ? ' para esta busca' : ''} · ${num(pg.de)}–${num(pg.ate)} nesta página</p>
+    <div class="tabela-wrap mt-sm"><table class="tabela">
+      <thead><tr><th>Prova</th><th class="oculta-mobile">Categoria</th><th>Ginete</th><th class="oculta-mobile">Cavalo</th><th></th></tr></thead>
+      <tbody>${pg.itens.length ? pg.itens.map(i => `<tr>
+        <td><b>${esc((eventoDe(i.eventoId) || {}).nome || '—')}</b>
+          <div class="mini fraco">${dataBR((eventoDe(i.eventoId) || {}).dataInicio)} · ${esc(i.ciclo || '')}</div></td>
+        <td class="oculta-mobile">${esc(categoriaDe(i.categoriaId).nome)}</td>
+        <td>${esc(nomeGinete(i.gineteId))}</td>
+        <td class="oculta-mobile">${esc(nomeCavalo(i.cavaloId))}${i.box ? ` <span class="mini fraco">· box ${esc(i.box)}</span>` : ''}</td>
+        <td><button class="btn sec sm" onclick="modalInscricao()" title="Nova inscrição">+</button></td>
+      </tr>`).join('') : `<tr><td colspan="5">${vazio(q ? 'Nenhuma inscrição para "' + termo + '".' : 'Nenhuma inscrição registrada.')}</td></tr>`}</tbody>
+    </table></div>
+    ${pg.total > 1 ? paginador(pg, rota, 'pag') : ''}`;
+  };
+
+  setTimeout(() => ligarFiltroAoVivo('insBusca', 'insArea', (termo, pag) => corpo(termo, pag)), 0);
+
   return `<div class="card"><div class="linha entre"><h3 style="margin:0">Inscrições</h3>
       <button class="btn verde sm" onclick="modalInscricao()">Nova inscrição</button></div>
     <p class="pequeno fraco">Cada inscrição liga um ginete a um cavalo em uma prova e categoria. O mesmo par pode aparecer em provas diferentes — inscrições distintas.</p>
-    ${tabela([
-      { titulo: 'Prova', render: i => esc((eventoDe(i.eventoId) || {}).nome || '—') },
-      { titulo: 'Categoria', render: i => esc(categoriaDe(i.categoriaId).nome) },
-      { titulo: 'Ginete', render: i => esc(nomeGinete(i.gineteId)) },
-      { titulo: 'Cavalo', render: i => esc(nomeCavalo(i.cavaloId)) },
-      { titulo: 'Situação', render: i => selo(i.selo === 'conferido' ? 'conferido' : 'semfonte', i.status) }
-    ], S.inscricoes.slice(-60).reverse())}
+    <div class="linha mt">${campoBusca('insBusca', params.q || '', 'Prova, ginete, cavalo ou categoria…')}</div>
+    <div id="insArea">${corpo(params.q || '', paginaAtual(params, 'pag'))}</div>
   </div>`;
 }
+
+
+
 function modalInscricao() {
+  /* só provas que podem receber inscrição: as que já existem e não são ranking oficial importado */
+  const provas = S.eventos.slice().sort((a, b) => String(b.dataInicio).localeCompare(String(a.dataInicio)));
+  const cavalos = S.cavalos.filter(c => !c.ancestral);
+  const ginetes = S.ginetes;
+
   abrirModal(`<div class="linha entre"><h3>Nova inscrição</h3><button class="fechar" onclick="fecharModal()">×</button></div>
     <form class="form mt-sm" id="fIns">
-      <div class="campo"><label>Prova</label><select id="insEv">${S.eventos.map(e => `<option value="${e.id}">${esc(e.nome)} (${dataBR(e.dataInicio)})</option>`).join('')}</select></div>
-      <div class="campo"><label>Categoria</label><select id="insCat">${CATEGORIAS.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}</select></div>
-      <div class="campo"><label>Ginete</label><select id="insGin">${S.ginetes.map(g => `<option value="${g.id}">${esc(g.nome)}</option>`).join('')}</select></div>
-      <div class="campo"><label>Cavalo</label><select id="insCav">${S.cavalos.filter(c => !c.ancestral).map(c => `<option value="${c.id}">${esc(c.nome)} · ${esc(c.registro)}</option>`).join('')}</select></div>
-      <button class="btn verde" type="submit">Inscrever</button>
+      <div class="campo"><label>Prova *</label><select id="insEv">
+        ${provas.map(e => `<option value="${e.id}">${esc(e.nome)} · ${dataBR(e.dataInicio)} · ${esc(e.ciclo)}</option>`).join('')}
+      </select></div>
+      <div class="linha-form">
+        <div class="campo"><label>Categoria *</label><select id="insCat">
+          ${CATEGORIAS.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join('')}
+        </select></div>
+        <div class="campo"><label>Box</label><input id="insBox" inputmode="numeric" placeholder="opcional"></div>
+      </div>
+
+      <div class="campo"><label>Ginete *</label>
+        ${seletorBusca('insGin', ginetes, {
+          placeholder: 'Digite o nome do ginete…',
+          rotulo: g => g.nome,
+          extra: g => [g.cidade && g.cidade + '/' + (g.uf || ''), g.profissao].filter(Boolean).join(' · ')
+        })}
+      </div>
+
+      <div class="campo"><label>Cavalo *</label>
+        ${seletorBusca('insCav', cavalos, {
+          placeholder: 'Nome, registro, criador ou afixo…',
+          rotulo: c => c.nome,
+          extra: c => [c.registro, c.sexo, c.pelagem].filter(Boolean).join(' · ')
+        })}
+      </div>
+
+      <div class="aviso aviso-info mini">Ao escolher o cavalo, o cadastro mostra se ele já correu nesta prova ou se o ginete tem outro cavalo na mesma categoria — para não criar inscrição repetida.</div>
+      <div id="insAviso"></div>
+
+      <div class="form-acoes">
+        <button class="btn verde" type="submit">Inscrever ginete e cavalo</button>
+        <button class="btn sec" type="button" onclick="fecharModal()">Cancelar</button>
+      </div>
     </form>`);
+
+  ligarSeletorBusca('insGin', ginetes, { rotulo: g => g.nome, extra: g => g.cidade || '' });
+  ligarSeletorBusca('insCav', cavalos, {
+    rotulo: c => c.nome, extra: c => c.registro || '',
+    aoEscolher: () => conferirInscricao()
+  });
+
+  /* confere duplicidade e avisa antes de gravar */
+  window.conferirInscricao = () => {
+    const ev = eventoDe($('#insEv').value);
+    const cat = $('#insCat').value;
+    const cav = $('#insCav').value;
+    const gin = $('#insGin').value;
+    const alvo = $('#insAviso');
+    if (!alvo) return;
+    const avisos = [];
+
+    if (cav && ev && S.inscricoes.some(i => i.eventoId === ev.id && i.categoriaId === cat && i.cavaloId === cav)) {
+      const q = S.inscricoes.find(i => i.eventoId === ev.id && i.categoriaId === cat && i.cavaloId === cav);
+      avisos.push(`Este cavalo já está inscrito nesta categoria, com ${esc(nomeGinete(q.gineteId))}.`);
+    }
+    if (cav && S.inscricoes.some(i => i.cavaloId === cav && i.categoriaId === cat && i.eventoId === (ev || {}).id)) {
+      /* coberto acima */
+    }
+    if (gin && ev && S.inscricoes.some(i => i.eventoId === ev.id && i.gineteId === gin && i.categoriaId === cat)) {
+      const outros = S.inscricoes.filter(i => i.eventoId === ev.id && i.gineteId === gin && i.categoriaId === cat);
+      const nomes = outros.map(i => nomeCavalo(i.cavaloId)).join(', ');
+      avisos.push(`Este ginete já tem ${outros.length > 1 ? 'cavalos' : 'um cavalo'} nesta categoria: <b>${esc(nomes)}</b>.`);
+    }
+    if (!avisos.length) { alvo.innerHTML = ''; return; }
+    alvo.innerHTML = `<div class="aviso aviso-atencao">${avisos.join('<br>')}</div>`;
+  };
+
+  $('#insEv').onchange = conferirInscricao;
+  $('#insCat').onchange = conferirInscricao;
+
   $('#fIns').onsubmit = (ev) => {
     ev.preventDefault();
-    const e = eventoDe($('#insEv').value);
-    const dup = S.inscricoes.some(i => i.eventoId === e.id && i.categoriaId === $('#insCat').value && i.cavaloId === $('#insCav').value);
+    const prova = eventoDe($('#insEv').value);
+    const cat = $('#insCat').value;
+    const gin = $('#insGin').value;
+    const cav = $('#insCav').value;
+
+    if (!prova) return toast('Escolha a prova.', 'erro');
+    if (!gin) return toast('Escolha o ginete na busca.', 'erro');
+    if (!cav) return toast('Escolha o cavalo na busca.', 'erro');
+
+    const dup = S.inscricoes.some(i => i.eventoId === prova.id && i.categoriaId === cat && i.cavaloId === cav);
     if (dup) return toast('Este cavalo já está inscrito nesta categoria da prova.', 'erro');
+
+    const box = ($('#insBox').value || '').trim();
     S.inscricoes.push({
-      id: uid('ins'), eventoId: e.id, ciclo: e.ciclo, categoriaId: $('#insCat').value,
-      gineteId: $('#insGin').value, cavaloId: $('#insCav').value, status: 'inscrito', fonte: e.documento, selo: 'semfonte', criadoEm: hojeISO()
+      id: uid('ins'), eventoId: prova.id, ciclo: prova.ciclo, categoriaId: cat,
+      gineteId: gin, cavaloId: cav, box: box || null, status: 'inscrito',
+      fonte: prova.documento || 'Cadastro administrativo', selo: 'semfonte', criadoEm: hojeISO()
     });
-    Motor.auditar('Nova inscrição', e.nome, '', $('#insCat').value, 'Cadastro administrativo', e.documento);
-    salvar(); fecharModal(); toast('Inscrição criada.'); render();
+
+    /* mantém o vínculo ginete <-> cavalo coerente no cadastro */
+    const g = gineteDe(gin);
+    if (g) {
+      g.cavalosIds = Array.from(new Set([].concat(g.cavalosIds || [], [cav])));
+    }
+    const c = porId(S.cavalos, cav);
+    if (c) {
+      c.ciclos = Array.from(new Set([].concat(c.ciclos || [], [prova.ciclo]))).sort();
+      c.categorias = Array.from(new Set([].concat(c.categorias || [], [cat]))).sort();
+    }
+
+    Motor.auditar('Nova inscrição', prova.nome + ' · ' + categoriaDe(cat).nome, '',
+      nomeGinete(gin) + ' / ' + nomeCavalo(cav), 'Cadastro administrativo', prova.documento);
+    salvar(); fecharModal();
+    toast('Inscrição criada: ' + nomeGinete(gin) + ' com ' + nomeCavalo(cav) + '.');
+    render();
   };
 }
 
@@ -5028,14 +5198,144 @@ function modalSessao(id) {
 /* ---------------- CADASTROS: CAVALOS / GINETES / JURADOS / NÚCLEOS ---------------- */
 
 /* componente de cadastro reutilizável: lista + busca + editar + novo */
+/* ---------------------------------------------------------------
+   FILTRO AO VIVO — digita e a lista já se filtra, sem apertar Enter.
+   Só redesenha a área de resultado (o campo não perde o foco).
+   Guarda o termo na memória da tela para paginação e links.
+   --------------------------------------------------------------- */
+const FILTROS = {};
+
+function ligarFiltroAoVivo(idCampo, idArea, desenhar) {
+  const campo = document.getElementById(idCampo);
+  const area = document.getElementById(idArea);
+  if (!campo || !area) return;
+  FILTROS[idCampo] = campo.value || '';
+
+  let t = null;
+  const aplicar = (imediato) => {
+    clearTimeout(t);
+    const rodar = () => {
+      FILTROS[idCampo] = campo.value;
+      /* volta para a página 1 ao mudar o termo */
+      area.innerHTML = desenhar(campo.value, 1);
+    };
+    if (imediato) rodar(); else t = setTimeout(rodar, 140);
+  };
+
+  campo.oninput = () => aplicar(false);
+  campo.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); aplicar(true); }
+    if (e.key === 'Escape') { campo.value = ''; aplicar(true); }
+  };
+}
+
+/* ---------------------------------------------------------------
+   SELETOR COM BUSCA — para escolher 1 entre centenas (cavalo, ginete).
+   O <select> nativo com 800 opções é impraticável no celular.
+   --------------------------------------------------------------- */
+function seletorBusca(id, itens, opts) {
+  const o = opts || {};
+  const rotulo = (x) => o.rotulo ? o.rotulo(x) : x.nome;
+  const extra = (x) => o.extra ? o.extra(x) : '';
+  const inicial = o.valor ? itens.find(x => x.id === o.valor) : null;
+  return `<div class="sb" data-sb="${id}">
+    <input class="sb-campo" id="${id}Busca" type="search" autocomplete="off"
+           placeholder="${esc(o.placeholder || 'Digite para buscar…')}"
+           value="${inicial ? esc(rotulo(inicial)) : ''}">
+    <input type="hidden" id="${id}" value="${o.valor ? esc(o.valor) : ''}">
+    <div class="sb-lista" id="${id}Lista" hidden></div>
+    <div class="sb-esc" id="${id}Escolhido">${inicial ? esc(rotulo(inicial)) + (extra(inicial) ? ' · ' + esc(extra(inicial)) : '') : ''}</div>
+  </div>`;
+}
+
+/* liga o comportamento do seletor; chamado depois que o modal é montado */
+function ligarSeletorBusca(id, itens, opts) {
+  const o = opts || {};
+  const campo = document.getElementById(id + 'Busca');
+  const oculto = document.getElementById(id);
+  const lista = document.getElementById(id + 'Lista');
+  const escEl = document.getElementById(id + 'Escolhido');
+  if (!campo || !lista) return;
+  const rotulo = (x) => o.rotulo ? o.rotulo(x) : x.nome;
+  const extra = (x) => o.extra ? o.extra(x) : '';
+  const LIMITE = 30;
+
+  const fechar = () => { lista.hidden = true; lista.innerHTML = ''; };
+  const escolher = (x) => {
+    oculto.value = x.id;
+    campo.value = rotulo(x);
+    escEl.textContent = rotulo(x) + (extra(x) ? ' · ' + extra(x) : '');
+    fechar();
+    if (typeof o.aoEscolher === 'function') o.aoEscolher(x);
+  };
+
+  const desenhar = (termo) => {
+    const q = norm(termo || '');
+    /* sem termo: mostra os primeiros, não os 800 */
+    const achados = (q ? itens.filter(x => norm(rotulo(x) + ' ' + extra(x)).includes(q)) : itens).slice(0, LIMITE);
+    if (!achados.length) {
+      lista.innerHTML = '<div class="sb-vazio">Nada encontrado. Confira a grafia ou cadastre antes.</div>';
+      lista.hidden = false;
+      return;
+    }
+    const total = q ? itens.filter(x => norm(rotulo(x) + ' ' + extra(x)).includes(q)).length : itens.length;
+    lista.innerHTML = achados.map(x => `<button type="button" class="sb-item" data-id="${esc(x.id)}">
+      <b>${esc(rotulo(x))}</b>${extra(x) ? `<span>${esc(extra(x))}</span>` : ''}</button>`).join('')
+      + (total > LIMITE ? `<div class="sb-mais">${num(total - LIMITE)} outro(s) — refine a busca</div>` : '');
+    lista.hidden = false;
+    lista.querySelectorAll('.sb-item').forEach(b => {
+      b.onclick = () => escolher(itens.find(x => x.id === b.dataset.id));
+    });
+  };
+
+  campo.oninput = () => {
+    oculto.value = '';           /* digitar invalida a escolha anterior */
+    escEl.textContent = '';
+    desenhar(campo.value);
+  };
+  campo.onfocus = () => { if (!oculto.value) desenhar(campo.value); };
+  campo.onkeydown = (e) => {
+    if (e.key === 'Escape') { fechar(); return; }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      /* Enter escolhe o primeiro resultado — evita submeter o formulário sem querer */
+      const primeiro = lista.querySelector('.sb-item');
+      if (primeiro) primeiro.click();
+    }
+  };
+  document.addEventListener('click', (ev) => {
+    if (!ev.target.closest('[data-sb="' + id + '"]')) fechar();
+  }, { once: true });
+}
+
 function telaCadastro(cfg) {
   const params = lerHash().params;
-  const q = norm(params.q || '');
-  const todos = cfg.itens();
-  const lista = todos.filter(x => !q || norm(cfg.busca(x)).includes(q));
-  const pg = paginar(lista, paginaAtual(params, 'pag'));
+  const totais = cfg.itens();
 
-  const rota = '#/admin/' + (lerHash().caminho[1] || '') + (q ? '?q=' + encodeURIComponent(q) + '&' : '?');
+  /* `termo` vazio = lista completa (comportamento antigo preservado) */
+  const filtrar = (termo) => {
+    const q = norm(termo || '');
+    return q ? totais.filter(x => norm(cfg.busca(x)).includes(q)) : totais;
+  };
+
+  const corpo = (termo, pagina) => {
+    const lista = filtrar(termo);
+    const pg = paginar(lista, pagina || paginaAtual(params, 'pag'));
+    const q = norm(termo || '');
+    const rota = '#/admin/' + (lerHash().caminho[1] || '') + (q ? '?q=' + encodeURIComponent(termo) + '&' : '?');
+    return `<p class="mini fraco mt-sm">${num(pg.quantidade)} registro(s)${q ? ' para esta busca' : ''} · ${num(pg.de)}–${num(pg.ate)} nesta página</p>
+    <div class="tabela-wrap mt-sm"><table class="tabela">
+      <thead><tr><th>${esc(cfg.singular)}</th>${cfg.colunas.map((c, i) => `<th class="${c.num ? 'num' : ''}${i > 0 ? ' oculta-mobile' : ''}">${esc(c.titulo)}</th>`).join('')}<th></th></tr></thead>
+      <tbody>${pg.itens.length ? pg.itens.map(x => `<tr>
+        <td><b>${esc(cfg.busca(x))}</b>${cfg.sub ? `<div class="mini fraco">${esc(cfg.sub(x))}</div>` : ''}</td>
+        ${cfg.colunas.map((c, i) => `<td class="${c.num ? 'num' : ''}${i > 0 ? ' oculta-mobile' : ''}">${c.render ? c.render(x) : esc(x[c.campo] == null ? '—' : x[c.campo])}</td>`).join('')}
+        <td><button class="btn sec sm" onclick="${cfg.editar}('${x.id}')">Editar</button></td>
+      </tr>`).join('') : `<tr><td colspan="${cfg.colunas.length + 2}">${vazio(q ? 'Nenhum registro para "' + termo + '".' : 'Nenhum registro encontrado.')}</td></tr>`}</tbody>
+    </table></div>
+    ${pg.total > 1 ? paginador(pg, rota, 'pag') : ''}`;
+  };
+
+  setTimeout(() => ligarFiltroAoVivo('cadBusca', 'cadArea', (termo, pag) => corpo(termo, pag)), 0);
 
   return `<div class="card">
     <div class="linha entre">
@@ -5044,16 +5344,7 @@ function telaCadastro(cfg) {
       <button class="btn verde sm" onclick="${cfg.novo}()">Cadastrar ${esc(cfg.singular)}</button>
     </div>
     <div class="linha mt">${campoBusca('cadBusca', params.q || '', cfg.placeholder || 'Buscar no cadastro…')}</div>
-    <p class="mini fraco mt-sm">${num(pg.quantidade)} registro(s)${q ? ' para esta busca' : ''} · ${num(pg.de)}–${num(pg.ate)} nesta página</p>
-    <div class="tabela-wrap mt-sm"><table class="tabela">
-      <thead><tr><th>${esc(cfg.singular)}</th>${cfg.colunas.map((c, i) => `<th class="${c.num ? 'num' : ''}${i > 0 ? ' oculta-mobile' : ''}">${esc(c.titulo)}</th>`).join('')}<th></th></tr></thead>
-      <tbody>${pg.itens.length ? pg.itens.map(x => `<tr>
-        <td><b>${esc(cfg.busca(x))}</b>${cfg.sub ? `<div class="mini fraco">${esc(cfg.sub(x))}</div>` : ''}</td>
-        ${cfg.colunas.map((c, i) => `<td class="${c.num ? 'num' : ''}${i > 0 ? ' oculta-mobile' : ''}">${c.render ? c.render(x) : esc(x[c.campo] == null ? '—' : x[c.campo])}</td>`).join('')}
-        <td><button class="btn sec sm" onclick="${cfg.editar}('${x.id}')">Editar</button></td>
-      </tr>`).join('') : `<tr><td colspan="${cfg.colunas.length + 2}">${vazio('Nenhum registro encontrado.')}</td></tr>`}</tbody>
-    </table></div>
-    ${paginador(pg, rota, 'pag')}
+    <div id="cadArea">${corpo(params.q || '', paginaAtual(params, 'pag'))}</div>
     <div class="fonte-linha">Toda inclusão e alteração passa pela auditoria com autor, antes, depois, motivo e fonte.</div>
   </div>`;
 }
@@ -5592,20 +5883,34 @@ function resolverSolicitacao(id, status) {
 
 /* ---------------- USUÁRIOS ---------------- */
 function adUsuarios() {
-  return `<div class="card"><h3>Usuários e permissões</h3>
-    <div class="aviso aviso-info">Permissões por função validadas no servidor. Esconder botão na tela não é segurança — a regra vale também para chamada direta à API.</div>
-    ${tabela([
+  const params = lerHash().params;
+  const filtrar = (termo) => {
+    const q = norm(termo || '');
+    if (!q) return S.usuarios;
+    return S.usuarios.filter(u => norm([u.nome, u.email, rotuloPapel(u.papel), u.status].join(' ')).includes(q));
+  };
+  const corpo = (termo) => {
+    const lista = filtrar(termo);
+    const q = norm(termo || '');
+    return `<p class="mini fraco mt-sm">${num(lista.length)} usuário(s)${q ? ' para esta busca' : ''}</p>
+    <div class="mt-sm">${tabela([
       { titulo: 'Nome', campo: 'nome' },
       { titulo: 'E-mail', render: u => `<span class="mini">${esc(u.email)}</span>` },
       { titulo: 'Papel', render: u => selo('conferido', rotuloPapel(u.papel)) },
       { titulo: 'MFA', render: u => u.mfa ? selo('oficial', 'ativa') : selo('semfonte', 'inativa') },
       { titulo: 'Status', campo: 'status' }
-    ], S.usuarios)}
+    ], lista)}</div>`;
+  };
+  setTimeout(() => ligarFiltroAoVivo('usrBusca', 'usrArea', (termo) => corpo(termo)), 0);
+
+  return `<div class="card"><h3>Usuários e permissões</h3>
+    <div class="aviso aviso-info">Permissões por função validadas no servidor. Esconder botão na tela não é segurança — a regra vale também para chamada direta à API.</div>
+    <div class="linha mt">${campoBusca('usrBusca', params.q || '', 'Nome, e-mail, papel ou status…')}</div>
+    <div id="usrArea">${corpo(params.q || '')}</div>
     <div class="fonte-linha">Superadministrador exige MFA. Exclusão/anonimização só dentro do permitido em lei, com trilha.</div>
   </div>`;
 }
 
-/* ---------------- AUDITORIA ---------------- */
 function adAuditoria() {
   return `<div class="card"><div class="linha entre"><h3 style="margin:0">Trilha de auditoria</h3>
       <button class="btn sec sm" onclick="exportarAuditoria()">Exportar CSV</button></div>
