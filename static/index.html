@@ -333,7 +333,7 @@ function abreviarEtapa(nome) {
 /* lista compacta: cada conjunto numa linha, etapas em grade pequena */
 function listaCompactaNotas(linhas, opts) {
   const o = opts || {};
-  if (!linhas.length) return vazio('Sem notas lançadas.');
+  if (!linhas.length) return vazio('Sem médias lançadas.');
   return `<div class="nt-lista">${linhas.map(l => `
     <div class="nt-linha">
       <div class="nt-ident">
@@ -2566,6 +2566,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Base oficial de ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-13 11:39 · 4b0d46f</p>
       </div>
     </div>
   </div></footer>`;
@@ -4926,7 +4927,7 @@ function confirmarExclusao() {
 
 const MENU_ADMIN = [
   ['visao', 'Visão geral'], ['ciclos', 'Ciclos e regulamentos'], ['provas', 'Provas'],
-  ['inscricoes', 'Inscrições'], ['sumulas', 'Súmulas e notas'], ['sessoes', 'Sessões de julgamento'],
+  ['inscricoes', 'Inscrições'], ['sumulas', 'Súmulas e médias'], ['sessoes', 'Sessões de julgamento'],
   ['cavalos', 'Cadastro de cavalos'], ['ginetes', 'Cadastro de ginetes'], ['jurados', 'Cadastro de jurados'],
   ['nucleos', 'Núcleos promotores'],
   ['rankings', 'Rankings'], ['importar', 'Importações'], ['maestro', 'Maestro'],
@@ -5489,8 +5490,8 @@ function adSumulas() {
   const semInscricao = (id) => S.inscricoes.some(i => i.eventoId === id) ? '' : ' · sem inscrição';
   const escolhida = lerHash().params.ev || (evs[0] || {}).id;
 
-  return `<div class="card"><h3>Lançamento de notas por etapa</h3>
-    <div class="aviso aviso-info">A nota é do conjunto na prova. Nota por jurado só existe quando o documento a individualiza — nos demais casos, fica marcada como “não individualizada”.</div>
+  return `<div class="card"><h3>Lançamento das médias por etapa</h3>
+    <div class="aviso aviso-info">Aqui se registra a <b>média da etapa</b> — o número que a súmula publica. A nota de cada jurado não é lançada neste portal.</div>
     <div class="filtros">
       <div class="campo"><label>Prova</label><select id="sgEv" onchange="navegar('#/admin/sumulas?ev='+this.value)">
         ${evs.map(e => `<option value="${e.id}" ${e.id === escolhida ? 'selected' : ''}>${esc(e.nome)} · ${dataBR(e.dataInicio)}${semInscricao(e.id)}</option>`).join('')}
@@ -5563,7 +5564,7 @@ function corpoSumula(evId) {
 
   return `<p class="pequeno">Prova <b>${esc(e.nome)}</b> · ciclo ${esc(e.ciclo)} · ${ins.length} inscrições · ${selo(e.selo)}</p>
     ${ehOficial ? `<div class="aviso aviso-atencao"><b>Esta prova já tem resultado oficial.</b>
-      A digitação de notas aqui fica marcada como provisória e <b>não substitui</b> a média publicada pela ABCCC.
+      A digitação de médias aqui fica marcada como provisória e <b>não substitui</b> a média publicada pela ABCCC.
       Se a intenção é corrigir a oficial, isso é feito na importação do documento, com registro do que veio.</div>` : ''}
     <div class="aviso aviso-info">A <b>média</b> é a soma de todas as etapas dividida por <b>8</b> (categorias A) ou <b>6</b> (categorias B) — Art. 11, I.
       Em cada etapa digite a <b>média da etapa</b>: até <b>15</b> nas cinco primeiras e até <b>20</b> da Mangueira 2 em diante.
@@ -5571,7 +5572,7 @@ function corpoSumula(evId) {
     ${temA ? bloco(ETAPAS_A, 8, 'A') : ''}
     ${temB ? bloco(ETAPAS_B, 6, 'B') : ''}
     <div class="linha mt">
-      <button class="btn verde" onclick="salvarNotas('${evId}')">Salvar notas no rascunho</button>
+      <button class="btn verde" onclick="salvarNotas('${evId}')">Salvar médias da etapa</button>
       <span class="mini fraco">Cada alteração registra valor anterior e novo na auditoria.</span>
     </div>`;
 }
@@ -5627,7 +5628,7 @@ async function salvarNotas(evId) {
       const anterior = existente.etapaMedia ? existente.valor
         : (existente.bruta != null ? existente.bruta : existente.valor);
       if (Math.abs(Number(anterior) - v) > 0.0001 || !existente.etapaMedia) {
-        Motor.auditar('Correção de nota', ins + '/' + et, anterior, v, 'Conferência de súmula', ev.documento || '');
+        Motor.auditar('Correção de média da etapa', ins + '/' + et, anterior, v, 'Conferência de súmula', ev.documento || '');
         existente.etapaMedia = true;
         existente.valor = v;                 /* média da etapa, 0 a 15/20 */
         existente.teto = teto;
@@ -5643,18 +5644,18 @@ async function salvarNotas(evId) {
         etapaMedia: true, valor: v, teto,
         individual: false, fonte: ev.documento || 'Lançamento manual', selo: 'provisorio'
       });
-      Motor.auditar('Lançamento de nota', ins + '/' + et, '', v, 'Digitação a partir de documento', ev.documento || '');
+      Motor.auditar('Lançamento de média da etapa', ins + '/' + et, '', v, 'Digitação a partir de documento', ev.documento || '');
       alterados++;
     }
   });
 
   /* uma célula inválida não pode impedir de gravar as outras */
   if (erros.length) {
-    toast(erros.length + ' nota(s) não aceita(s) (' + erros[0] + '). As demais foram salvas.', 'erro');
+    toast(erros.length + ' média(s) não aceita(s) (' + erros[0] + '). As demais foram salvas.', 'erro');
     if (!alterados) return;
   }
 
-  if (!alterados) { if (!erros.length) toast('Nenhuma alteração para salvar.'); return; }
+  if (!alterados) { if (!erros.length) toast('Nenhuma média nova ou alterada para salvar.'); return; }
 
   const r = recalcularProva(evId);
   salvar();
@@ -5673,7 +5674,7 @@ async function salvarNotas(evId) {
       return;
     }
   }
-  if (!erros.length) toast(alterados + ' nota(s) salva(s) ' + destino + '. ' + r.msg);
+  if (!erros.length) toast(alterados + ' média(s) de etapa salva(s) ' + destino + '. ' + r.msg);
   render();
 }
 /* Recalcula a prova a partir das notas digitadas.
@@ -5717,8 +5718,8 @@ function recalcularProva(evId) {
   });
 
   const partes = [];
-  if (criados) partes.push(criados + ' resultado(s) novo(s)');
-  if (atualizados) partes.push(atualizados + ' recalculado(s)');
+  if (criados) partes.push(criados + ' classificação(ões) gerada(s)');
+  if (atualizados) partes.push(atualizados + ' classificação(ões) recalculada(s)');
   if (preservados) partes.push(preservados + ' oficial(is) preservado(s)');
   return { msg: partes.length ? partes.join(' · ') + '.' : 'Nada a recalcular.', preservados };
 }
@@ -6577,7 +6578,7 @@ function adAuditoria() {
       { titulo: 'Depois', render: a => `<span class="mini">${esc(a.depois || '—')}</span>` },
       { titulo: 'Motivo', render: a => `<span class="mini">${esc(a.motivo || '—')}</span>` }
     ], S.auditoria.slice(0, 80))}
-    <div class="fonte-linha">Correção de nota registra autor, valor anterior, novo, motivo e fonte. Nada é apagado.</div>
+    <div class="fonte-linha">Correção de média registra autor, valor anterior, novo, motivo e fonte. Nada é apagado.</div>
   </div>`;
 }
 function exportarAuditoria() {
