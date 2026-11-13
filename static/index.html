@@ -86,9 +86,10 @@ const CATEGORIAS = [
    B = 6: Andadura, Figura, VSP/Esbarradas, Mangueira 1, Mangueira 2, Bayard/Sarmento
           (Art. 11, IV: categorias B não têm etapa de Campo) */
 /* Teto da nota por etapa — Regulamento do Freio de Ouro (Art. 49 e 50), aplicado
-   ao Freio do Proprietário por força do Art. 11 do regulamento da modalidade:
-     Fase Inicial → nota 0 a 10 com peso 1,5  → vale até 15
-     Fase Final   → nota 0 a 10 com peso 2,0  → vale até 20
+   ao Freio do Proprietário por força do Art. 11 do regulamento da modalidade.
+   O que se registra por etapa é a MÉDIA DA ETAPA, já na escala final:
+     Fase Inicial (5 primeiras) → até 15
+     Fase Final   (Mangueira 2 em diante) → até 20
    Categorias A: 5 iniciais (15) + 3 finais (20) = 8
    Categorias B: 4 iniciais (15) + 2 finais (20) = 6 */
 const ETAPAS_A = [
@@ -545,7 +546,14 @@ async function carregarDadosDoServidor() {
     const pacote = await api('/dados');
     if (!pacote || !Object.keys(pacote).length) return false;
     COLECOES_SINC.forEach(col => {
-      if (Array.isArray(pacote[col])) S[col] = pacote[col];
+      if (!Array.isArray(pacote[col])) return;
+      /* ANEXA em vez de substituir: cadastro que existe só neste navegador
+         (gravado offline, ou enquanto o servidor recusava) não pode ser
+         engolido pela versão do banco. Em conflito de mesmo id, o do banco
+         ganha, porque é o que vale para todo mundo. */
+      const mapa = new Map(pacote[col].map(x => [String(x && x.id), x]));
+      const soLocal = (S[col] || []).filter(x => x && x.id != null && !mapa.has(String(x.id)));
+      S[col] = pacote[col].concat(soLocal);
     });
     return true;
   } catch (e) { return false; }
@@ -555,25 +563,50 @@ let FILA_SALVAR = null;
 let SALVANDO = false;
 
 /* Envia em segundo plano, agrupando várias chamadas seguidas (lançar 8 notas
-   não precisa de 8 requisições). Sem sessão, não tenta: o dado está no navegador. */
+   não precisa de 8 requisições). Sem sessão, não tenta: o dado está no navegador.
+
+   IMPORTANTE: com `imediato` a função DEVOLVE a promessa e REJEITA se o
+   servidor não confirmou. Antes ela engolia o erro, então a tela dizia
+   "salvo" e o valor voltava ao antigo na recarga seguinte. */
 function sincronizarDados(imediato) {
-  if (!apiDisponivel() || !API.token) return;
-  if (FILA_SALVAR) clearTimeout(FILA_SALVAR);
+  if (!apiDisponivel() || !API.token) {
+    return imediato ? Promise.reject(new Error('sem sessão no servidor')) : Promise.resolve(false);
+  }
+  if (FILA_SALVAR) { clearTimeout(FILA_SALVAR); FILA_SALVAR = null; }
+
   const enviar = async () => {
-    if (SALVANDO) { FILA_SALVAR = setTimeout(enviar, 400); return; }
+    if (SALVANDO) {
+      /* um envio já está em curso: espera e manda de novo com o estado atual */
+      await new Promise(r => setTimeout(r, 500));
+      return enviar();
+    }
     SALVANDO = true;
     try {
       const colecoes = {};
       COLECOES_SINC.forEach(c => { if (Array.isArray(S[c])) colecoes[c] = S[c]; });
       await api('/admin/dados', { method: 'PUT', body: JSON.stringify({ colecoes }) });
       API.ultimoSalvo = new Date().toISOString();
+      API.erroSalvar = null;
+      API.pendente = false;
+      return true;
     } catch (e) {
       API.erroSalvar = e.message;
-      if (typeof toast === 'function') toast('Não consegui gravar no servidor: ' + e.message, 'erro');
+      API.pendente = true;
+      throw e;
     } finally { SALVANDO = false; }
   };
-  if (imediato) enviar();
-  else FILA_SALVAR = setTimeout(enviar, 700);
+
+  if (imediato) return enviar();
+  /* em segundo plano: o erro vai para o estado, mas não derruba a tela */
+  return new Promise(resolve => {
+    FILA_SALVAR = setTimeout(async () => {
+      try { await enviar(); resolve(true); }
+      catch (e) {
+        if (typeof toast === 'function') toast('Não consegui gravar no servidor: ' + e.message + '. Toque em Salvar de novo.', 'erro');
+        resolve(false);
+      }
+    }, 700);
+  });
 }
 
 /* ---------- visita e busca contabilizadas no servidor ---------- */
@@ -1086,27 +1119,44 @@ let S = (() => {
 
 let SESSAO = Store.get(CHAVE + '-sessao', null);
 
-/* ---------- migração de notas gravadas no formato antigo ----------
-   Até 12/11 as notas eram gravadas com `valor` = nota do jurado e `peso: 1`.
-   O motor calcula `valor = bruta × peso` (1,5 inicial / 2 final), então
-   aquelas notas produziam média baixa (8,25 virava 8,250 em vez de 13,922).
-   Aqui cada nota antiga ganha `bruta` e o peso certo — sem perder o que
-   foi digitado. Roda uma vez e não mexe em nota que já está no formato novo. */
+/* ---------- migração das notas para a MÉDIA DA ETAPA ----------
+   A nota que se digita é a MÉDIA DA ETAPA (até 15 nas cinco primeiras, até 20
+   da Mangueira 2 em diante), não a nota do jurado de 0 a 10. Tudo que foi
+   gravado antes vinha em outra escala e precisa ser convertido, sem perder o
+   que a pessoa digitou:
+     • formato "jurado × peso" (tem `bruta`)     → valor = bruta × peso
+     • formato antigo `valor` 0–10, `peso: 1`    → valor = valor × peso da etapa
+     • `valor` já acima de 10                    → já é média da etapa, só marca
+   Roda a cada abertura e não mexe em nota que já está no formato novo. */
 function migrarNotasAntigas() {
   if (!Array.isArray(S.notas) || !S.notas.length) return 0;
   let migradas = 0;
   S.notas.forEach(n => {
-    if (n.bruta != null) return;                 /* já está no formato novo */
+    if (!n || n.etapaMedia) return;              /* já está no formato novo */
     const ins = porId(S.inscricoes, n.inscricaoId);
     if (!ins) return;
     const etapas = etapasDe(ins.ciclo, ins.categoriaId) || [];
     const etapa = etapas.find(e => e.id === n.etapaId);
     const peso = (etapa && etapa.peso) || (Number(n.peso) > 1 ? Number(n.peso) : 1.5);
-    const bruto = Number(n.valor);
-    if (!isFinite(bruto) || bruto < 0 || bruto > 10) return;   /* fora de 0–10: não adivinha */
-    n.bruta = bruto;
-    n.peso = peso;
-    n.valor = Math.round(bruto * peso * 1000) / 1000;
+    const teto = (etapa && etapa.maxNota) || (peso >= 2 ? 20 : 15);
+
+    let val = null;
+    if (n.bruta != null && isFinite(Number(n.bruta))) {
+      const bruta = Number(n.bruta);
+      if (bruta >= 0 && bruta <= 10) val = bruta * peso;
+    }
+    if (val == null && n.valor != null && isFinite(Number(n.valor))) {
+      const v = Number(n.valor);
+      if (v > 10 && v <= teto) val = v;          /* já é média da etapa */
+      else if (v >= 0 && v <= 10) val = v * peso;
+    }
+    if (val == null || !isFinite(val) || val < 0 || val > teto) return;  /* não adivinha */
+
+    n.etapaMedia = true;
+    n.valor = Math.round(val * 1000) / 1000;
+    n.teto = teto;
+    delete n.bruta;
+    delete n.peso;
     migradas++;
   });
   return migradas;
@@ -1180,13 +1230,20 @@ const Motor = (() => {
     return { etapas: etapasDe(ins.ciclo, ins.categoriaId), grupo, divisor: grupo === 'B' ? 6 : 8 };
   }
 
-  /* nota da etapa = nota do jurado (0 a 10) × peso da fase (1,5 inicial / 2 final)
-     → vale até 15 nas etapas iniciais e até 20 nas finais.
+  /* NOTA DA ETAPA é a MÉDIA DA ETAPA, já na escala do regulamento:
+     até 15 nas cinco primeiras (Andadura, Figura, VSP/Esbarradas,
+     Mangueira 1, Campo 1) e até 20 nas da fase final (Mangueira 2,
+     Bayard/Sarmento, Campo 2). NÃO é a nota do jurado de 0 a 10.
      A média da prova é a soma dessas 8 (ou 6) notas ÷ divisor do grupo. */
   function notaEtapaValor(nota) {
-    const bruta = nota && nota.bruta != null ? Number(nota.bruta) : (nota && nota.valor != null ? Number(nota.valor) / (Number(nota.peso) || 1.5) : null);
-    const peso = nota && nota.peso ? Number(nota.peso) : 1.5;
-    if (bruta == null || isNaN(bruta)) return nota && nota.valor != null ? Number(nota.valor) : null;
+    if (!nota) return null;
+    /* formato novo: o valor digitado JÁ é a média da etapa */
+    if (nota.etapaMedia && nota.valor != null) return Number(nota.valor);
+    /* formato antigo (nota do jurado × peso): converte para a escala da etapa */
+    const bruta = nota.bruta != null ? Number(nota.bruta)
+      : (nota.valor != null ? Number(nota.valor) / (Number(nota.peso) || 1.5) : null);
+    const peso = nota.peso ? Number(nota.peso) : 1.5;
+    if (bruta == null || isNaN(bruta)) return nota.valor != null ? Number(nota.valor) : null;
     return Math.round(bruta * peso * 1000) / 1000;
   }
 
@@ -5478,7 +5535,7 @@ function corpoSumula(evId) {
               return `<div class="nt-cel">
                 <div class="nt-rot" title="${esc(et.nome)}">${esc(abreviarEtapa(et.nome))}</div>
                 <input class="inp-nota" data-ins="${i.id}" data-etapa="${et.id}" type="text" inputmode="decimal"
-                  autocomplete="off" value="${n ? String(n.bruta != null ? n.bruta : n.valor).replace('.', ',') : ''}" placeholder="—"
+                  autocomplete="off" value="${n ? String(n.etapaMedia ? n.valor : (n.bruta != null ? n.bruta : n.valor)).replace('.', ',') : ''}" placeholder="—"
                   aria-label="${esc(et.nome)}">
               </div>`;
             }).join('')}
@@ -5509,7 +5566,8 @@ function corpoSumula(evId) {
       A digitação de notas aqui fica marcada como provisória e <b>não substitui</b> a média publicada pela ABCCC.
       Se a intenção é corrigir a oficial, isso é feito na importação do documento, com registro do que veio.</div>` : ''}
     <div class="aviso aviso-info">A <b>média</b> é a soma de todas as etapas dividida por <b>8</b> (categorias A) ou <b>6</b> (categorias B) — Art. 11, I.
-      Digite com ponto ou vírgula: a nota do jurado vai de 0 a 10.</div>
+      Em cada etapa digite a <b>média da etapa</b>: até <b>15</b> nas cinco primeiras e até <b>20</b> da Mangueira 2 em diante.
+      Aceita vírgula ou ponto.</div>
     ${temA ? bloco(ETAPAS_A, 8, 'A') : ''}
     ${temB ? bloco(ETAPAS_B, 6, 'B') : ''}
     <div class="linha mt">
@@ -5520,7 +5578,7 @@ function corpoSumula(evId) {
 
 /* Lê o que foi digitado aceitando vírgula (teclado brasileiro).
    Sem isso, "8,25" virava 825 — fora do intervalo, ou 8,25 lido errado. */
-function lerNotaDigitada(bruto) {
+function lerNotaDigitada(bruto, max) {
   const s = String(bruto == null ? '' : bruto).trim();
   if (!s) return { vazio: true };
   /* ponto e vírgula mistos, ou separador de milhar: "1.234,5" */
@@ -5535,11 +5593,17 @@ function lerNotaDigitada(bruto) {
   }
   const n = Number(limpo);
   if (!Number.isFinite(n)) return { erro: 'A nota precisa ser um número.' };
-  if (n < 0 || n > 10) return { erro: 'A nota do jurado vai de 0 a 10.' };
+  /* o campo recebe a MÉDIA DA ETAPA, não a nota do jurado: até 15 nas cinco
+     primeiras etapas (Andadura, Figura, VSP/Esbarradas, Mangueira 1, Campo 1)
+     e até 20 nas etapas da fase final (Mangueira 2, Bayard, Campo 2). */
+  const teto = (max == null ? 15 : Number(max));
+  if (n < 0 || n > teto) {
+    return { erro: 'A média da etapa vai de 0 a ' + String(teto).replace('.', ',') + '.' };
+  }
   return { valor: Math.round(n * 1000) / 1000 };
 }
 
-function salvarNotas(evId) {
+async function salvarNotas(evId) {
   const campos = $$('.inp-nota');
   const ev = eventoDe(evId) || {};
   let alterados = 0;
@@ -5547,37 +5611,36 @@ function salvarNotas(evId) {
 
   campos.forEach(inp => {
     const ins = inp.dataset.ins, et = inp.dataset.etapa;
+    const inscricao = porId(S.inscricoes, ins) || {};
+    const etapa = (etapasDe(inscricao.ciclo, inscricao.categoriaId) || []).find(x => x.id === et);
+    const teto = (etapa && etapa.maxNota) || 15;
 
-    /* Se a nota foi editada e o campo ainda mostra o valor normalizado
-       (8.25 no lugar de 8,25) e o usuário NÃO mudou nada, não mexe: assim
-       salvar duas vezes não reescreve o que já estava certo. */
-    const lido = lerNotaDigitada(inp.value);
+    const lido = lerNotaDigitada(inp.value, teto);
     if (lido.vazio || lido.erro) {
       if (lido.erro) erros.push(`${inp.value}: ${lido.erro}`);
       return;
     }
-    const v = lido.valor;
-    /* o peso vem da ETAPA, não fixo em 1: 1,5 na fase inicial e 2 na final.
-       Sem isso a média saía dividida pelo peso errado e mudava de valor. */
-    const etapa = (etapasDe((eventoDe(evId) || {}).ciclo, categoriaDe((porId(S.inscricoes, ins) || {}).categoriaId)) || [])
-      .find(x => x.id === et);
-    const peso = (etapa && etapa.peso) || 1.5;
+    const v = lido.valor;   /* já é a MÉDIA DA ETAPA, na escala de 15 ou 20 */
 
     const existente = S.notas.find(n => n.inscricaoId === ins && n.etapaId === et);
     if (existente) {
-      const anterior = existente.bruta != null ? existente.bruta : existente.valor;
-      if (Math.abs(Number(anterior) - v) > 0.0001 || Number(existente.peso) !== peso) {
+      const anterior = existente.etapaMedia ? existente.valor
+        : (existente.bruta != null ? existente.bruta : existente.valor);
+      if (Math.abs(Number(anterior) - v) > 0.0001 || !existente.etapaMedia) {
         Motor.auditar('Correção de nota', ins + '/' + et, anterior, v, 'Conferência de súmula', ev.documento || '');
-        existente.bruta = v;                 /* o que o jurado deu, 0 a 10 */
-        existente.peso = peso;               /* peso da fase */
-        existente.valor = Math.round(v * peso * 1000) / 1000;  /* nota da etapa */
+        existente.etapaMedia = true;
+        existente.valor = v;                 /* média da etapa, 0 a 15/20 */
+        existente.teto = teto;
         existente.selo = 'provisorio';
+        /* campos do formato antigo (nota do jurado × peso) deixam de valer */
+        delete existente.bruta;
+        delete existente.peso;
         alterados++;
       }
     } else {
       S.notas.push({
         id: uid('nota'), inscricaoId: ins, etapaId: et, sessaoId: null,
-        bruta: v, peso, valor: Math.round(v * peso * 1000) / 1000,
+        etapaMedia: true, valor: v, teto,
         individual: false, fonte: ev.documento || 'Lançamento manual', selo: 'provisorio'
       });
       Motor.auditar('Lançamento de nota', ins + '/' + et, '', v, 'Digitação a partir de documento', ev.documento || '');
@@ -5595,7 +5658,22 @@ function salvarNotas(evId) {
 
   const r = recalcularProva(evId);
   salvar();
-  if (!erros.length) toast(alterados + ' nota(s) salva(s). ' + r.msg);
+
+  /* Só diz "salvo" depois de o SERVIDOR confirmar. Antes, uma falha de
+     gravação (405/502/rede) aparecia como sucesso e o valor voltava ao
+     antigo na recarga seguinte — parecia que a nota "não salvou". */
+  let destino = 'neste navegador';
+  if (typeof sincronizarDados === 'function' && apiDisponivel() && API.token) {
+    try {
+      await sincronizarDados(true);
+      destino = 'no servidor';
+    } catch (e) {
+      toast('Gravado só neste navegador: o servidor não respondeu (' + e.message + '). Toque em Salvar de novo.', 'erro');
+      render();
+      return;
+    }
+  }
+  if (!erros.length) toast(alterados + ' nota(s) salva(s) ' + destino + '. ' + r.msg);
   render();
 }
 /* Recalcula a prova a partir das notas digitadas.
@@ -6387,7 +6465,17 @@ function publicarImportacao() {
     Object.entries(r.notas).forEach(([etapaId, v]) => {
       if (v == null) return;
       const ex = S.notas.find(n => n.inscricaoId === ins.id && n.etapaId === etapaId);
-      if (ex) { ex.valor = v; ex.selo = 'provisorio'; } else { S.notas.push({ id: uid('nota'), inscricaoId: ins.id, etapaId, sessaoId: null, valor: v, peso: 1, individual: false, fonte: 'Importação CSV', selo: 'provisorio' }); }
+      const etapaImp = (etapasDe(ins.ciclo, ins.categoriaId) || []).find(x => x.id === etapaId);
+      const tetoImp = (etapaImp && etapaImp.maxNota) || 15;
+      if (ex) {
+        ex.etapaMedia = true; ex.valor = v; ex.teto = tetoImp;
+        delete ex.bruta; delete ex.peso;
+        ex.selo = 'provisorio';
+      } else {
+        S.notas.push({ id: uid('nota'), inscricaoId: ins.id, etapaId, sessaoId: null,
+          etapaMedia: true, valor: v, teto: tetoImp,
+          individual: false, fonte: 'Importação CSV', selo: 'provisorio' });
+      }
       novasNotas++;
     });
   });
@@ -7979,7 +8067,7 @@ const STATUS_REQ = [
 const REGRAS_REGULAMENTO = [
   ['Seis categorias', 'Amador A, Master A, Sênior A, Amador B, Master B e Feminina (Art. 3º).', 'A idade define o enquadramento: 16–40, 41–55, 56+, 16–44, 45+ e feminina 16+ (Art. 4º).'],
   ['Média da prova', 'Soma de todas as etapas ÷ 8 nas categorias A e ÷ 6 nas B (Art. 11, I).', 'O vencedor do evento é quem obtém a maior média nas etapas funcionais.'],
-  ['Teto de cada etapa', 'As quatro primeiras etapas valem até 15; Mangueira 2 e Bayard/Sarmento valem até 20.', 'Nota do painel de 0 a 10 com peso 1,5 (fase inicial) e 2,0 (fase final) — Freio de Ouro, Art. 49 e 50, aplicado pelo Art. 11.'],
+  ['Teto de cada etapa', 'Andadura, Figura, VSP/Esbarradas, Mangueira 1 e Campo 1 valem até 15; Mangueira 2, Bayard/Sarmento e Campo 2 valem até 20.', 'O que se registra por etapa é a média da etapa — Freio de Ouro, Art. 49 e 50, aplicado pelo Art. 11.'],
   ['Teto de pontos por conjunto', 'A pontuação de credenciamento para em 12 pontos por animal e categoria.', 'Art. 15, §1º: ao obter 12 o animal fica habilitado no ranking; excedente não soma.'],
   ['8 etapas nas categorias A', 'Andadura, Figura, VSP e Esbarradas, Mangueira 1, Campo 1, Mangueira 2, Bayard/Sarmento, Campo 2.', 'Tabela 2 do Art. 12.'],
   ['6 etapas nas categorias B', 'Andadura, Figura, VSP e Esbarradas, Mangueira 1, Mangueira 2, Bayard/Sarmento.', 'Tabela 3 do Art. 12 + Art. 11, IV: categorias B e Feminina não têm etapa de Campo.'],
