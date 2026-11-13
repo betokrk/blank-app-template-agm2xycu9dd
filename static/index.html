@@ -154,6 +154,70 @@ function campoBusca(id, valor, placeholder) {
   <input id="${id}" type="search" value="${esc(valor || '')}" placeholder="${esc(placeholder || 'Buscar…')}" autocomplete="off"></div>`;
 }
 
+/* =====================================================================
+   BUSCA AO VIVO — monta o campo e liga o filtro enquanto a pessoa digita.
+   `desenhar(termo)` devolve o HTML da área; a área precisa de um id.
+   `campos(registro)` devolve um texto único para casar as palavras.
+   ===================================================================== */
+function casaBusca(termo, texto) {
+  const palavras = norm(termo).split(/\s+/).filter(Boolean);
+  if (!palavras.length) return true;
+  const alvo = norm(texto);
+  return palavras.every(p => alvo.includes(p));
+}
+
+function campoBuscaViva(id, areaId, placeholder, desenhar, opts) {
+  const o = opts || {};
+  return `<div class="busca-viva" data-area="${areaId}">
+    <div class="busca">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="${id}" type="search" autocomplete="off" value="${esc(o.valor || '')}"
+             placeholder="${esc(placeholder || 'Buscar cavalo ou ginete…')}" aria-label="${esc(placeholder || 'Buscar')}">
+      <button class="busca-limpa" id="${id}Limpa" type="button" title="Limpar busca" hidden>×</button>
+    </div>
+    <div class="busca-conta" id="${id}Conta" hidden></div>
+  </div>
+  ${o.semArea ? '' : `<div id="${areaId}"></div>`}`;
+}
+
+function ligarBuscaViva(id, areaId, desenhar) {
+  const campo = document.getElementById(id);
+  if (!campo) return;
+  const area = areaId === null ? null : document.getElementById(areaId);
+  const limpa = document.getElementById(id + 'Limpa');
+
+  const aplicar = (imediato) => {
+    clearTimeout(campo._t);
+    const rodar = () => {
+      /* area === null → o campo recolhe a lista inteira numa string e quem
+         chamou decide onde pintar */
+      const alvo = area || document.createElement('div');
+      alvo.innerHTML = desenhar(campo.value);
+      if (area) { area.innerHTML = alvo.innerHTML; }
+      if (limpa) limpa.hidden = !campo.value;
+      const conta = document.getElementById(id + 'Conta');
+      if (conta) {
+        const marcado = (area || alvo).querySelector('[data-total]');
+        const n = marcado ? Number(marcado.dataset.total)
+          : (area || alvo).querySelectorAll('[data-busca-item]').length;
+        conta.hidden = !campo.value;
+        conta.textContent = campo.value
+          ? `${n} resultado${n === 1 ? '' : 's'} para “${campo.value}”` : '';
+      }
+    };
+    if (imediato) rodar(); else campo._t = setTimeout(rodar, 130);
+  };
+
+  campo.oninput = () => aplicar(false);
+  campo.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); aplicar(true); }
+    if (e.key === 'Escape') { campo.value = ''; aplicar(true); }
+  };
+  if (limpa) limpa.onclick = () => { campo.value = ''; aplicar(true); campo.focus(); };
+  /* primeira pintura com o termo que já estava na tela (link compartilhado) */
+  aplicar(true);
+}
+
 function tabela(cols, linhas, opts) {
   if (!linhas.length) return vazio('Nenhum registro encontrado com esses filtros.');
   const o = opts || {};
@@ -1715,6 +1779,13 @@ tr.dest td{background:#fbf5e6}
   background:var(--papel);font-size:14.5px}
 .busca svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--texto-fraco)}
 .busca input:focus{outline:2px solid var(--azul-2);outline-offset:1px;border-color:transparent}
+.busca-limpa{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:26px;height:26px;
+  border:0;border-radius:50%;background:var(--linha);color:var(--texto-fraco);font-size:16px;line-height:1;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.busca-limpa:hover{background:var(--azul-2);color:#fff}
+.busca-viva{display:flex;flex-direction:column;gap:6px}
+.busca-conta{font-size:12.5px;color:var(--texto-fraco);margin:0}
+.busca-viva .busca input{padding-right:40px}
 .filtros{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end;margin-top:12px}
 .campo{display:flex;flex-direction:column;gap:4px;min-width:0}
 .campo label{font-size:11.5px;font-weight:700;color:var(--texto-fraco);text-transform:uppercase;letter-spacing:.04em}
@@ -2656,8 +2727,11 @@ function pgRankings(el, r) {
   ], linhas, { classe: 'rank' })}</div>
   <div class="rk-so-cards">${cartoesRanking(linhas)}</div>`;
 
-  const blocoCalculado = cat
-    ? (rk.porCategoria[cat] && rk.porCategoria[cat].length ? tabelaRanking(rk.porCategoria[cat]) : vazio('Ainda não há resultados publicados para esta categoria.'))
+  /* lista completa (sem busca): é o que aparece antes de digitar */
+  const blocoInicial = cat
+    ? (rk.porCategoria[cat] && rk.porCategoria[cat].length
+        ? tabelaRanking(rk.porCategoria[cat])
+        : vazio('Ainda não há resultados publicados para esta categoria.'))
     : CATEGORIAS.map(k => {
       const lista = rk.porCategoria[k.id] || [];
       if (!lista.length) return '';
@@ -2693,25 +2767,71 @@ function pgRankings(el, r) {
 
     ${c && c.status !== 'publicado' ? `<div class="aviso aviso-atencao mt-sm">Este ciclo está em <b>rascunho</b> (${esc(c.doc)}). Números não devem ser divulgados como oficiais.</div>` : ''}
 
+    <div class="mt-sm mb">
+      ${campoBuscaViva('bRank', null, 'Buscar cavalo ou ginete…', null, { valor: r.params.q || '', semArea: true })}
+    </div>
+
+    <div id="rankArea"></div>
+
+    <div id="rankResto">
     ${vista === 'oficial' ? `
       <div class="aviso aviso-info mt-sm">${selo('oficial')} Ranking recebido da fonte oficial, exibido sem recálculo. As seis categorias do ciclo 2026 têm base importada.</div>
       ${ofi.length ? tabela([
         { titulo: 'Pos.', num: true, render: x => `<span class="pos" style="font-family:Georgia,serif;font-weight:700;color:var(--azul)">${x.posicao}º</span>` },
         { titulo: 'Competidor', render: x => `<b>${esc(x.nomeGinete)}</b>` },
         { titulo: 'Cavalo', render: x => esc(x.nomeCavalo) },
+        { titulo: 'Categoria', render: x => `<span class="mini">${esc(categoriaDe(x.categoriaId).nome)}</span>` },
         { titulo: 'Pontos (fonte)', num: true, render: x => num(x.pontos, 1) },
         { titulo: 'Fonte', render: x => selo('oficial') }
       ], ofi, { classe: 'rank' }) : vazio('Nenhum ranking oficial importado para este recorte.')}
     ` : `
       <div class="aviso aviso-info mt-sm">${selo('oficial')} Ranking do ciclo ${esc(ciclo)}: ordena primeiro pelos <b>pontos</b> de credenciamento (12 = habilitado, depois 10/8/6/4/2) e, dentro do mesmo ponto, pela <b>maior média</b> do cavalo — a melhor nota dele no ciclo. A posição publicada pela ABCCC é preservada; o portal não reordena lista oficial.</div>
-      ${blocoCalculado}
+      ${blocoInicial}
       ${divs.length ? `<div class="aviso aviso-atencao mt-sm"><b>${divs.length} divergência(s) entre o ranking oficial e o cálculo.</b> Ficam pendentes de revisão e nada é corrigido em silêncio. <button class="btn sec sm" onclick="modalDivergencias('${ciclo}','${cat}')">Ver lista</button></div>` : ''}
     `}
+    </div>
     <div class="fonte-linha">
       ${selo('derivado')} estatística calculada · ${selo('oficial')} documento de origem · ${selo('conferido')} transcrição revisada.<br>
       Pontuação de habilitação não é nota de prova, e média do conjunto não é pontuação de ranking: cada coluna mede uma coisa só.
     </div>
   </div>`;
+
+  /* ---- busca rápida: digita e filtra, sem recarregar a tela ---- */
+  const desenharArea = (termo) => {
+    const vazioTxt = 'Nenhum cavalo ou ginete com esse nome.';
+    if (!termo.trim()) return '';
+
+    if (vista === 'oficial') {
+      const achados = ofi.filter(x => casaBusca(termo, x.nomeCavalo + ' ' + x.nomeGinete));
+      return `<div data-total="${achados.length}"></div>` + (achados.length ? `<div class="card"><h2>Busca no ranking</h2>${tabela([
+        { titulo: 'Pos.', num: true, render: x => `<b>${x.posicao}º</b>` },
+        { titulo: 'Competidor', render: x => `<b>${esc(x.nomeGinete)}</b>` },
+        { titulo: 'Cavalo', render: x => esc(x.nomeCavalo) },
+        { titulo: 'Categoria', render: x => `<span class="mini">${esc(categoriaDe(x.categoriaId).nome)}</span>` },
+        { titulo: 'Pontos (fonte)', num: true, render: x => num(x.pontos, 1) }
+      ], achados, { classe: 'rank' })}</div>` : `<div class="card">${vazio(vazioTxt)}</div>`);
+    }
+
+    const casa = (x) => casaBusca(termo, nomeCavalo(x.cavaloId) + ' ' + nomeGinete(x.gineteId));
+    if (cat) {
+      const achados = (rk.porCategoria[cat] || []).filter(casa);
+      return `<div data-total="${achados.length}"></div>` + `<div class="card">${achados.length ? tabelaRanking(achados) : vazio(vazioTxt)}</div>`;
+    }
+    let total = 0;
+    const blocos = CATEGORIAS.map(k => {
+      const achados = (rk.porCategoria[k.id] || []).filter(casa);
+      if (!achados.length) return '';
+      total += achados.length;
+      return `<h3 class="mt">${esc(k.nome)} <span class="mini fraco">(${achados.length})</span></h3>${tabelaRanking(achados)}`;
+    }).join('');
+    return `<div data-total="${total}"></div>` + `<div class="card">${total ? blocos : vazio(vazioTxt)}</div>`;
+  };
+
+  ligarBuscaViva('bRank', 'rankArea', (termo) => {
+    const resto = $('#rankResto');
+    if (resto) resto.hidden = !!termo.trim();
+    return desenharArea(termo);
+  });
 }
 
 function pontosOficiais(ciclo, linha) {
@@ -3142,7 +3262,7 @@ function listaBusca(itens) {
 /* =====================================================================
    PÁGINA DA FINAL — comparativo credenciadora × final.
    Quem classifica para a Final é o CAVALO: por isso o mesmo animal pode
-   aparecer na Final montado por outro ginete (cavalo comercializado).
+   aparecer na Final montado por outro ginete (cavalo transferido).
    Limite de 3 cavalos por ginete na Final.
    ===================================================================== */
 
@@ -3206,7 +3326,7 @@ function analiseFinal(ciclo) {
       : null;
     /* troca de ginete = PESSOA diferente, não id diferente: grafias do mesmo
        nome ("JOAO FRANCISCO FELDMANN VIEIRA" x "JOÃO FRANCISCO FELDAMANN VIEIRA")
-       criam ids distintos e não são comercialização. */
+       criam ids distintos e não são transferência. */
     const trocouGinete = !!(gineteCred && gineteCred !== c.gineteId
       && !mesmaPessoa(nomeGinete(gineteCred), nomeGinete(c.gineteId)));
 
@@ -3251,8 +3371,8 @@ function analiseFinal(ciclo) {
   const ginetesComMulti = Object.keys(totalPorPessoa).filter(k => totalPorPessoa[k] > 1)
     .map(k => ({ gineteId: k, quantidade: totalPorPessoa[k] }));
 
-  /* --- cavalos comercializados: mesmo animal, outro ginete --- */
-  const comercializados = comparativo.filter(c => c.trocouGinete);
+  /* --- cavalos transferidos: mesmo animal, outro ginete na final --- */
+  const transferidos = comparativo.filter(c => c.trocouGinete);
 
   /* --- pódio por categoria --- */
   const porCategoria = {};
@@ -3276,7 +3396,7 @@ function analiseFinal(ciclo) {
     cavalosDistintos: cavalosDistintos.size,
     ginetesDistintos: ginetesDistintos.size,
     ginetes, multi, excedidos, ginetesComMulti,
-    comercializados,
+    transferidos,
     comVariacao,
     catalogoCompleto,
     temClassificacaoCompleta: catalogoCompleto && !!(S.final && S.final.temClassificacaoCompleta),
@@ -3298,7 +3418,9 @@ function pgFinal(el, r) {
   }
   const ano = r.params.ano && finais.some(c => c.id === r.params.ano) ? r.params.ano : finais[0].id;
   const A = analiseFinal(ano);
-  const aba = r.params.aba || 'resumo';
+  /* links antigos usavam "comercializados"; o nome da aba mudou para
+     "transferidos" e o endereço antigo continua funcionando */
+  const aba = ({ comercializados: 'transferidos' })[r.params.aba] || r.params.aba || 'resumo';
   const cat = A.conjuntos.filter(c => c.posicao != null).length;
 
   el.innerHTML = `
@@ -3321,18 +3443,97 @@ function pgFinal(el, r) {
     ${kpi(A.conjuntos.length, A.catalogoCompleto ? 'Conjuntos' : 'Conjuntos no pódio', 'na final')}
     ${kpi(A.cavalosDistintos, 'Cavalos', 'o animal classifica')}
     ${kpi(A.ginetesDistintos, 'Ginetes', 'em pista')}
-    ${A.catalogoCompleto ? kpi(A.comercializados.length, 'Comercializados', 'outro ginete') : ''}
+    ${A.catalogoCompleto ? kpi(A.transferidos.length, 'Transferidos', 'outro ginete') : ''}
     ${A.catalogoCompleto ? kpi(A.ginetesComMulti.length, 'Ginetes com +1 cavalo', 'limite de ' + MAX_CAVALOS_FINAL) : ''}
     ${kpi(A.melhorNota != null ? num(A.melhorNota, 3) : '—', 'Melhor nota', 'da final')}
   </div>
 
   <div class="abas">
     ${(A.catalogoCompleto
-       ? [['resumo', 'Comparativo'], ['categoria', 'Por categoria'], ['comercializados', 'Comercializados'], ['ginetes', 'Ginetes']]
+       ? [['resumo', 'Comparativo'], ['categoria', 'Por categoria'], ['transferidos', 'Transferidos'], ['ginetes', 'Ginetes']]
        : [['categoria', 'Por categoria']])
       .map(([id, rot]) => `<button class="${aba === id ? 'on' : ''}" onclick="navegar('#/final?ano=${ano}&aba=${id}')">${rot}</button>`).join('')}
   </div>
   <div id="corpoFinal">${corpoFinal(A, aba, ano)}</div>`;
+  ligarFinal(A, aba, ano);
+}
+
+/* ---------------------------------------------------------------------
+   BUSCA RÁPIDA DA FINAL — cavalo ou ginete, filtrando enquanto digita.
+   Vale nas três listas que têm nome de animal/pessoa: comparativo,
+   pódio por categoria e transferidos.
+   --------------------------------------------------------------------- */
+function ligarFinal(A, aba, ano) {
+  const casa = (termo, cavaloId, gineteId) =>
+    casaBusca(termo, nomeCavalo(cavaloId) + ' ' + nomeGinete(gineteId));
+  const vazioTxt = 'Nenhum cavalo ou ginete com esse nome.';
+
+  const tabelaComp = (linhas) => `<div class="so-tabela-lg">${tabela([
+    { titulo: 'Box', num: true, render: x => x.box != null ? esc(x.box) : '—' },
+    { titulo: 'Cavalo', render: x => `<a href="#/cavalo/${x.cavaloId}"><b>${esc(nomeCavalo(x.cavaloId))}</b></a><div class="mini fraco">${esc(categoriaDe(x.categoriaId).nome)}</div>` },
+    { titulo: 'Ginete na final', render: x => `<a href="#/competidor/${x.gineteId}">${esc(nomeGinete(x.gineteId))}</a>${x.trocouGinete ? '<div class="mini" style="color:var(--couro)">trocou de ginete</div>' : ''}` },
+    { titulo: 'Cred.', num: true, render: x => x.notaCred != null ? num(x.notaCred, 3) : '—' },
+    { titulo: 'Final', num: true, render: x => x.notaFinal != null ? `<b>${num(x.notaFinal, 3)}</b>` : '—' },
+    { titulo: 'Variação', num: true, render: x => x.variacao == null ? '—' : `<span class="${x.variacao >= 0 ? 'var-mais' : 'var-menos'}">${x.variacao > 0 ? '+' : ''}${num(x.variacao, 3)}</span>` }
+  ], linhas, { classe: 'tab-comp-final' })}</div>
+  <div class="so-cards-lg">${linhas.map(x => `<div class="final-card">
+    <div class="fl-topo">
+      <span class="fl-box">${x.box != null ? 'Box ' + esc(x.box) : '——'}</span>
+      <span class="fl-cat">${esc(categoriaDe(x.categoriaId).nome)}</span>
+      ${x.posicao != null ? `<span class="fl-pos">${x.posicao}º</span>` : ''}
+    </div>
+    <a class="fl-cav" href="#/cavalo/${x.cavaloId}">${esc(nomeCavalo(x.cavaloId))}</a>
+    <div class="fl-gin">${esc(nomeGinete(x.gineteId))}${x.trocouGinete ? ' <span class="fl-trocou">trocou</span>' : ''}</div>
+    <div class="fl-notas">
+      <div><span>Credenciadora</span><b>${x.notaCred != null ? num(x.notaCred, 3) : '—'}</b></div>
+      <div><span>Final</span><b class="f">${x.notaFinal != null ? num(x.notaFinal, 3) : '—'}</b></div>
+      <div><span>Variação</span><b class="${x.variacao == null ? '' : (x.variacao >= 0 ? 'var-mais' : 'var-menos')}">${x.variacao == null ? '—' : (x.variacao > 0 ? '+' : '') + num(x.variacao, 3)}</b></div>
+    </div>
+  </div>`).join('')}</div>`;
+
+  const desenhar = (termo) => {
+    if (!termo.trim()) return '';
+    const resto = document.getElementById('finResto');
+    if (resto) resto.hidden = true;
+
+    if (aba === 'categoria') {
+      let total = 0;
+      const blocos = CATEGORIAS.filter(c => A.porCategoria[c.id]).map(cat => {
+        const achados = A.porCategoria[cat.id].filter(x => casa(termo, x.cavaloId, x.gineteId));
+        if (!achados.length) return '';
+        total += achados.length;
+        return tabelaCategoriaFinal(A, achados);
+      }).join('');
+      return `<div data-total="${total}"></div>` + (total ? blocos : vazio(vazioTxt));
+    }
+
+    if (aba === 'transferidos') {
+      const achados = A.transferidos.filter(x => casa(termo, x.cavaloId, x.gineteId));
+      return `<div data-total="${achados.length}"></div>` + (achados.length ? tabela([
+        { titulo: 'Cavalo', render: x => `<a href="#/cavalo/${x.cavaloId}"><b>${esc(nomeCavalo(x.cavaloId))}</b></a><div class="mini fraco">${esc(categoriaDe(x.categoriaId).nome)}${x.box != null ? ' · box ' + x.box : ''}</div>` },
+        { titulo: 'Ginete na credenciadora', render: x => x.gineteCredId ? `<a href="#/competidor/${x.gineteCredId}">${esc(nomeGinete(x.gineteCredId))}</a>` : '—' },
+        { titulo: 'Ginete na final', render: x => `<a href="#/competidor/${x.gineteId}"><b>${esc(nomeGinete(x.gineteId))}</b></a>` },
+        { titulo: 'Nota cred.', num: true, render: x => x.notaCred != null ? num(x.notaCred, 3) : '—' },
+        { titulo: 'Nota final', num: true, render: x => x.notaFinal != null ? num(x.notaFinal, 3) : '—' }
+      ], achados) : vazio(vazioTxt));
+    }
+
+    if (aba === 'resumo') {
+      const achados = A.comparativo.filter(x => casa(termo, x.cavaloId, x.gineteId))
+        .sort((a, b) => {
+          if (a.posicao != null && b.posicao != null) return a.posicao - b.posicao;
+          if (a.posicao != null) return -1;
+          if (b.posicao != null) return 1;
+          return (b.notaFinal || 0) - (a.notaFinal || 0);
+        });
+      return `<div data-total="${achados.length}"></div>` + (achados.length ? tabelaComp(achados) : vazio(vazioTxt));
+    }
+
+    return '';
+  };
+
+  const campo = document.getElementById('bFinComp') || document.getElementById('bFinCat');
+  if (campo) ligarBuscaViva(campo.id, 'finArea', desenhar);
 }
 
 function periodoFinal(ev) {
@@ -3348,38 +3549,44 @@ function ligarAbasFinal() {
   /* os botões já navegam por onclick; nada extra a ligar */
 }
 
+function tabelaCategoriaFinal(A, lista) {
+  return `<h3 class="mt">${esc(categoriaDe(lista[0].categoriaId).nome)} <span class="mini fraco">(${lista.length} conjuntos)</span></h3>
+    ${tabela([
+      { titulo: 'Pos.', num: true, render: x => x.posicao != null ? `<b>${x.posicao}º</b>` : '<span class="fraco">—</span>' },
+      { titulo: 'Box', num: true, render: x => x.box != null ? esc(x.box) : '—' },
+      { titulo: 'Cavalo', render: x => `<a href="#/cavalo/${x.cavaloId}"><b>${esc(nomeCavalo(x.cavaloId))}</b></a>` },
+      { titulo: 'Ginete', render: x => `<a href="#/competidor/${x.gineteId}">${esc(nomeGinete(x.gineteId))}</a>` },
+      { titulo: 'Nota final', num: true, render: x => x.notaFinal != null ? `<b>${num(x.notaFinal, 3)}</b>` : '<span class="fraco">em apuração</span>' }
+    ], lista)}`;
+}
+
 function corpoFinal(A, aba, ciclo) {
   if (aba === 'categoria') {
-    const pg = paginaAtual(lerHash().params, 'pag');
     return `<div class="card">
       ${A.catalogoCompleto ? '<h2>Pódio por categoria</h2>' : ''}
-      ${CATEGORIAS.filter(c => A.porCategoria[c.id]).map(cat => {
-        const lista = A.porCategoria[cat.id];
-        const comPos = lista.filter(x => x.posicao != null);
-        return `<h3 class="mt">${esc(cat.nome)} <span class="mini fraco">(${lista.length} conjuntos)</span></h3>
-          ${tabela([
-            { titulo: 'Pos.', num: true, render: x => x.posicao != null ? `<b>${x.posicao}º</b>` : '<span class="fraco">—</span>' },
-            { titulo: 'Box', num: true, render: x => x.box != null ? esc(x.box) : '—' },
-            { titulo: 'Cavalo', render: x => `<a href="#/cavalo/${x.cavaloId}"><b>${esc(nomeCavalo(x.cavaloId))}</b></a>` },
-            { titulo: 'Ginete', render: x => `<a href="#/competidor/${x.gineteId}">${esc(nomeGinete(x.gineteId))}</a>` },
-            { titulo: 'Nota final', num: true, render: x => x.notaFinal != null ? `<b>${num(x.notaFinal, 3)}</b>` : '<span class="fraco">em apuração</span>' }
-          ], lista)}`;
-      }).join('')}
+      <div class="mb">${campoBuscaViva('bFinCat', null, 'Buscar cavalo ou ginete…', null, { semArea: true })}</div>
+      <div id="finArea"></div>
+      <div id="finResto">
+      ${CATEGORIAS.filter(c => A.porCategoria[c.id]).map(cat => tabelaCategoriaFinal(A, A.porCategoria[cat.id])).join('')}
+      </div>
     </div>`;
   }
 
-  if (aba === 'comercializados') {
+  if (aba === 'transferidos') {
     return `<div class="card">
-      <h2>Cavalos comercializados</h2>
+      <h2>Cavalos transferidos</h2>
       <p class="mini fraco" style="margin-top:-6px">Animais que correram a credenciadora com um ginete e a Final com outro.</p>
-      ${A.comercializados.length ? tabela([
+      <div class="mb">${campoBuscaViva('bFinComp', null, 'Buscar cavalo ou ginete…', null, { semArea: true })}</div>
+      <div id="finArea"></div>
+      <div id="finResto">
+      ${A.transferidos.length ? tabela([
         { titulo: 'Cavalo', render: x => `<a href="#/cavalo/${x.cavaloId}"><b>${esc(nomeCavalo(x.cavaloId))}</b></a><div class="mini fraco">${esc(categoriaDe(x.categoriaId).nome)}${x.box != null ? ' · box ' + x.box : ''}</div>` },
         { titulo: 'Ginete na credenciadora', render: x => x.gineteCredId ? `<a href="#/competidor/${x.gineteCredId}">${esc(nomeGinete(x.gineteCredId))}</a>` : '—' },
         { titulo: 'Ginete na final', render: x => `<a href="#/competidor/${x.gineteId}"><b>${esc(nomeGinete(x.gineteId))}</b></a>` },
         { titulo: 'Nota cred.', num: true, render: x => x.notaCred != null ? num(x.notaCred, 3) : '—' },
         { titulo: 'Nota final', num: true, render: x => x.notaFinal != null ? num(x.notaFinal, 3) : '—' }
-      ], A.comercializados) : vazio('Nenhum cavalo trocou de ginete entre a credenciadora e a final neste ciclo.')}
-
+      ], A.transferidos) : vazio('Nenhum cavalo trocou de ginete entre a credenciadora e a final neste ciclo.')}
+      </div>
     </div>`;
   }
 
@@ -3414,6 +3621,9 @@ function corpoFinal(A, aba, ciclo) {
         <p class="mini fraco" style="margin:4px 0 0">Melhor nota do animal no ciclo contra a nota final da prova.</p>
       </div>
     </div>
+    <div class="mb">${campoBuscaViva('bFinComp', null, 'Buscar cavalo ou ginete…', null, { semArea: true })}</div>
+    <div id="finArea"></div>
+    <div id="finResto">
     <div class="so-tabela-lg">${tabela([
       { titulo: 'Box', num: true, render: x => x.box != null ? esc(x.box) : '—' },
       { titulo: 'Cavalo', render: x => `<a href="#/cavalo/${x.cavaloId}"><b>${esc(nomeCavalo(x.cavaloId))}</b></a><div class="mini fraco">${esc(categoriaDe(x.categoriaId).nome)}</div>` },
@@ -3440,6 +3650,7 @@ function corpoFinal(A, aba, ciclo) {
       </div>`).join('')}
     </div>
     ${paginador(pg, '#/final?ciclo=' + ciclo + '&aba=resumo')}
+    </div>
 
   </div>
 
