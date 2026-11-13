@@ -553,6 +553,41 @@ def admin_importacoes():
          order by i.id desc limit 30"""))
 
 
+# ---------------------------- dados de cadastro (sincroniza o navegador)
+
+
+@app.get("/api/dados")
+def dados_ler():
+    """Devolve o pacote de cadastros feitos pela operação.
+    A base oficial NÃO vem por aqui: ela vive no site."""
+    linhas = consultar("select chave, valor, atualizado_em from dados_app order by chave")
+    return jsonify({r["chave"]: r["valor"] for r in linhas})
+
+
+@app.put("/api/admin/dados")
+@exige(*PAPEIS_ESCRITA)
+def dados_gravar():
+    """Grava o pacote de cadastros. Uma linha por coleção, para não reescrever
+    o mundo a cada nota lançada."""
+    d = request.get_json(silent=True) or {}
+    colecoes = d.get("colecoes") or {}
+    if not isinstance(colecoes, dict):
+        return jsonify(erro="Formato inválido."), 400
+
+    gravadas = 0
+    for chave, valor in colecoes.items():
+        if not re.fullmatch(r"[a-z_]{3,30}", str(chave)):
+            continue
+        executar("""
+            insert into dados_app (chave, valor, atualizado_em)
+            values (%s, %s, now())
+            on conflict (chave) do update set valor = excluded.valor, atualizado_em = now()""",
+            (chave, json.dumps(valor, default=str)))
+        gravadas += 1
+    db().commit()
+    return jsonify(ok=True, colecoes=gravadas)
+
+
 # --------------------------------------------------------------------- estático
 
 
