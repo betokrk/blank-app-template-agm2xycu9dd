@@ -538,7 +538,7 @@ async function carregarRankingDoBanco(ciclo, categoriaId) {
    o pacote vai para o banco e volta igual em qualquer aparelho. */
 
 const COLECOES_SINC = ['eventos','inscricoes','resultados','notas','sessoes',
-  'cavalos','ginetes','jurados','nucleos','usuarios','anuncios','solicitacoes'];
+  'cavalos','ginetes','jurados','nucleos','usuarios','anuncios','solicitacoes','calendario'];
 
 async function carregarDadosDoServidor() {
   if (!apiDisponivel()) return false;
@@ -1077,7 +1077,9 @@ function juntarDados(base, guardado) {
   });
 
   /* preferências simples (banners, config, analytics) */
-  ['banners', 'config', 'analytics', 'favoritos'].forEach(k => {
+  /* calendário de credenciadoras: substitui inteiro (não mescla por id),
+     senão uma data apagada no painel voltaria na próxima abertura */
+  ['banners', 'config', 'analytics', 'favoritos', 'calendario'].forEach(k => {
     if (guardado[k] != null) base[k] = guardado[k];
   });
 
@@ -1088,7 +1090,7 @@ function juntarDados(base, guardado) {
 function extrairDadosDe(s) {
   const out = {};
   COLECOES_DE_PESSOAS.forEach(c => { if (Array.isArray(s[c])) out[c] = s[c]; });
-  ['banners', 'config', 'analytics', 'favoritos'].forEach(k => { if (s[k] != null) out[k] = s[k]; });
+  ['banners', 'config', 'analytics', 'favoritos', 'calendario'].forEach(k => { if (s[k] != null) out[k] = s[k]; });
   out.versao = 6;
   out.salvoEm = new Date().toISOString();
   return out;
@@ -1295,11 +1297,40 @@ const Motor = (() => {
     const grupo = {};
     /* O ranking é o das CREDENCIADORAS: a Final é outra prova e tem aba própria.
        Misturar as duas somaria pontos de final ao total do ciclo. */
+    /* ---------------------------------------------------------------
+       CÓPIA DO MESMO RESULTADO EM DUAS INSCRIÇÕES
+
+       O ranking oficial chega importado (selo oficial, com posição) e o
+       mesmo resultado pode também existir como lançamento do operador em
+       uma prova de credenciadora (provisório, sem posição). Como a chave
+       de agrupamento inclui a posição oficial, as duas linhas viravam dois
+       conjuntos e o animal aparecia DUAS vezes no ranking — foi o que
+       aconteceu na Amador B do ciclo 2027.
+
+       Art. 10: o detentor da pontuação é o ANIMAL. Então, havendo uma linha
+       oficial, a provisória com a MESMA média do mesmo animal e categoria é
+       a mesma prova e não entra de novo. Nada é apagado: some só da soma.
+       --------------------------------------------------------------- */
+    const chaveAnimal = (r, ins) => [ins.categoriaId, ins.cavaloId,
+      r.media == null ? '' : Number(r.media).toFixed(3)].join('|');
+    const oficiais = new Set();
+    const insDoResultado = (r) => porId(S.inscricoes, r.inscricaoId);
+    S.resultados.forEach(r => {
+      if (r.ciclo !== so.ciclo || r.origem === 'final') return;
+      if (so.categoriaId && r.categoriaId !== so.categoriaId) return;
+      if (r.selo !== 'oficial' && r.posicaoOficial == null) return;
+      const i = insDoResultado(r);
+      if (i) oficiais.add(chaveAnimal(r, i));
+    });
+
     S.resultados.filter(r => r.ciclo === so.ciclo && r.origem !== 'final'
         && (!so.categoriaId || r.categoriaId === so.categoriaId))
       .forEach(r => {
         const ins = porId(S.inscricoes, r.inscricaoId);
         if (!ins) return;
+        /* provisório que repete um resultado já publicado = mesma prova */
+        const ehOficial = r.selo === 'oficial' || r.posicaoOficial != null;
+        if (!ehOficial && oficiais.has(chaveAnimal(r, ins))) return;
         /* Chave do agrupamento: categoria + animal. Quando a linha veio de uma
            publicação oficial, a POSIÇÃO publicada também entra na chave: se o
            documento oficial traz o mesmo animal duas vezes (acontece na Feminina
@@ -2581,7 +2612,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Base oficial de ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-13 13:50 · 51f932b</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-13 17:46 · d4b7cf2</p>
       </div>
     </div>
   </div></footer>`;
@@ -4942,6 +4973,7 @@ function confirmarExclusao() {
 
 const MENU_ADMIN = [
   ['visao', 'Visão geral'], ['ciclos', 'Ciclos e regulamentos'], ['provas', 'Provas'],
+  ['credenciadoras', 'Credenciadoras'],
   ['inscricoes', 'Inscrições'], ['sumulas', 'Súmulas e médias'], ['sessoes', 'Sessões de julgamento'],
   ['cavalos', 'Cadastro de cavalos'], ['ginetes', 'Cadastro de ginetes'], ['jurados', 'Cadastro de jurados'],
   ['nucleos', 'Núcleos promotores'],
@@ -4956,7 +4988,8 @@ function pgAdmin(el, r) {
   if (!Motor.ehAdmin()) { el.innerHTML = `<div class="aviso aviso-erro">Acesso negado. Esta área exige perfil de editor ou administrador.</div>`; return; }
   const sub = r.sub || 'visao';
   const mapa = {
-    visao: adVisao, ciclos: adCiclos, provas: adProvas, inscricoes: adInscricoes, sumulas: adSumulas,
+    visao: adVisao, ciclos: adCiclos, provas: adProvas, credenciadoras: adCredenciadoras,
+    inscricoes: adInscricoes, sumulas: adSumulas,
     sessoes: adSessoes, jurados: adJurados, cavalos: adCavalos, ginetes: adGinetes, nucleos: adNucleos, rankings: adRankings,
     importar: adImportar, maestro: adMaestro, banners: adBanners, analytics: adAnalytics,
     identidade: adIdentidade,
@@ -5110,6 +5143,121 @@ function modalCiclo(id) {
 }
 
 /* ---------------- PROVAS (admin) ---------------- */
+/* ---------------------------------------------------------------
+   CREDENCIADORAS — calendário das próximas provas
+   Alimenta a faixa "Próximas credenciadoras" da aba Provas.
+   ------------------------------------------------ */
+function adCredenciadoras() {
+  const params = lerHash().params;
+  const hoje = hojeISO();
+  const lista = (S.calendario || []).slice().sort((a, b) => String(a.data).localeCompare(String(b.data)));
+
+  const filtrar = (termo) => {
+    const palavras = norm(termo || '').split(/\s+/).filter(Boolean);
+    if (!palavras.length) return lista;
+    return lista.filter(c => {
+      const alvo = norm([c.cidade, c.ciclo, c.obs, c.dataBR].join(' '));
+      return palavras.every(p => alvo.includes(p));
+    });
+  };
+
+  const corpo = (termo) => {
+    const achadas = filtrar(termo);
+    return `<p class="mini fraco mt-sm">${num(achadas.length)} credenciadora(s) no calendário</p>
+    <div class="mt-sm">${achadas.length ? tabela([
+      { titulo: 'Data', render: c => `<b>${esc(c.dataBR || dataBR(c.data))}</b>` },
+      { titulo: 'Cidade', render: c => `<b>${esc(c.cidade)}</b>${c.obs ? `<div class="mini fraco">${esc(c.obs)}</div>` : ''}` },
+      { titulo: 'Ciclo', render: c => esc(c.ciclo || '') },
+      { titulo: 'Situação', render: c => c.data < hoje
+          ? '<span class="selo selo-cinza">realizada</span>'
+          : '<span class="selo selo-verde">próxima</span>' },
+      { titulo: 'Ações', render: c => `<div class="acoes-linha">
+        <button class="btn sec sm" onclick="modalCredenciadora('${c.id}')">Editar</button>
+        <button class="btn sec sm perigo" onclick="excluirCredenciadora('${c.id}')">Excluir</button></div>` }
+    ], achadas) : vazio(termo ? 'Nenhuma credenciadora para esta busca.' : 'Nenhuma credenciadora cadastrada.')}</div>`;
+  };
+
+  setTimeout(() => ligarFiltroAoVivo('credBusca', 'credArea', (termo) => corpo(termo)), 0);
+
+  const proximas = lista.filter(c => c.data >= hoje).length;
+
+  return `<div class="card"><div class="linha entre"><h3 style="margin:0">Credenciadoras</h3>
+      <button class="btn verde sm" onclick="modalCredenciadora()">Nova credenciadora</button></div>
+    <p class="pequeno fraco">Calendário oficial das próximas provas. É esta lista que aparece na aba Provas do site — a próxima fica destacada.</p>
+    <p class="mini">${proximas} próxima(s) · ${lista.length - proximas} já realizada(s)</p>
+    <div class="linha mt">${campoBusca('credBusca', params.q || '', 'Cidade, ciclo ou data…')}</div>
+    <div id="credArea">${corpo(params.q || '')}</div>
+  </div>`;
+}
+
+function modalCredenciadora(id) {
+  const c = id ? (S.calendario || []).find(x => x.id === id) : null;
+  abrirModal(`<div class="linha entre"><h3>${c ? 'Editar credenciadora' : 'Nova credenciadora'}</h3><button class="fechar" onclick="fecharModal()">×</button></div>
+    <form class="form mt-sm" id="fCred">
+      <div class="linha-form">
+        <div class="campo"><label>Cidade *</label><input id="crCidade" value="${c ? esc(c.cidade) : ''}" required placeholder="Lagoa Vermelha"></div>
+        <div class="campo"><label>Data *</label><input id="crData" type="date" value="${c ? esc(c.data) : ''}" required></div>
+      </div>
+      <div class="linha-form">
+        <div class="campo"><label>Ciclo</label><select id="crCiclo">
+          ${S.ciclos.map(x => `<option value="${x.id}" ${c && c.ciclo === x.id ? 'selected' : ''}>${esc(x.nome)}</option>`).join('')}
+        </select></div>
+        <div class="campo"><label>Núcleo / observação</label><input id="crObs" value="${c ? esc(c.obs || '') : ''}" placeholder="opcional"></div>
+      </div>
+      <div class="form-acoes">
+        <button class="btn verde" type="submit">Salvar</button>
+        <button class="btn sec" type="button" onclick="fecharModal()">Cancelar</button>
+      </div>
+    </form>`);
+
+  $('#fCred').onsubmit = (ev) => {
+    ev.preventDefault();
+    const cidade = ($('#crCidade').value || '').trim();
+    const data = $('#crData').value;
+    if (!cidade || !data) return toast('Informe cidade e data.', 'erro');
+    const ciclo = $('#crCiclo').value;
+    const obs = ($('#crObs').value || '').trim();
+    const [a, m, d] = data.split('-');
+    const dataBR = `${d}/${m}/${a}`;
+
+    if (c) {
+      Motor.auditar('Edição de credenciadora', cidade, `${c.cidade} ${c.dataBR}`, `${cidade} ${dataBR}`, obs || 'Calendário', '');
+      c.cidade = cidade; c.data = data; c.dataBR = dataBR; c.ciclo = ciclo; c.obs = obs;
+    } else {
+      const dup = (S.calendario || []).some(x => norm(x.cidade) === norm(cidade) && x.data === data);
+      if (dup) return toast('Já existe credenciadora nesta cidade e data.', 'erro');
+      S.calendario = S.calendario || [];
+      S.calendario.push({ id: uid('cal'), cidade, data, dataBR, ciclo, obs, tipo: 'credenciadora' });
+      Motor.auditar('Nova credenciadora', cidade, '', `${cidade} ${dataBR}`, obs || 'Calendário', '');
+    }
+    salvar(); fecharModal();
+    toast(c ? 'Credenciadora atualizada.' : 'Credenciadora cadastrada.');
+    render();
+  };
+}
+
+function excluirCredenciadora(id) {
+  const c = (S.calendario || []).find(x => x.id === id);
+  if (!c) return toast('Credenciadora não encontrada.', 'erro');
+  abrirModal(`<div class="linha entre"><h3>Excluir credenciadora</h3><button class="fechar" onclick="fecharModal()">×</button></div>
+    <p class="mt-sm"><b>${esc(c.cidade)}</b> · ${esc(c.dataBR || dataBR(c.data))}</p>
+    <p class="mini fraco">Sai do calendário e deixa de aparecer na aba Provas do site.</p>
+    <div class="form-acoes">
+      <button class="btn perigo" onclick="confirmarExclusaoCredenciadora('${id}')">Excluir</button>
+      <button class="btn sec" onclick="fecharModal()">Cancelar</button>
+    </div>`);
+}
+
+function confirmarExclusaoCredenciadora(id) {
+  const c = (S.calendario || []).find(x => x.id === id);
+  if (!c) return;
+  Motor.auditar('Exclusão de credenciadora', c.cidade, `${c.cidade} ${c.dataBR || c.data}`, '', 'Exclusão pelo painel', '');
+  S.calendario = (S.calendario || []).filter(x => x.id !== id);
+  salvar(); fecharModal();
+  toast('Credenciadora excluída.');
+  render();
+}
+
 function adProvas() {
   const params = lerHash().params;
   const todos = S.eventos.slice().sort((a, b) => String(b.dataInicio).localeCompare(String(a.dataInicio)));
@@ -5135,9 +5283,11 @@ function adProvas() {
         return `<span class="selo selo-${ok === s.length ? 'verde' : 'ouro'}">${ok}/${s.length} categorias</span>`; } },
       { titulo: 'Status', render: e => selo(e.status === 'publicado' ? 'oficial' : 'provisorio', e.status) },
       { titulo: 'Inscrições', num: true, render: e => S.inscricoes.filter(i => i.eventoId === e.id).length },
-      { titulo: '', render: e => `<button class="btn sec sm" onclick="modalProva('${e.id}')">Editar</button>
+      { titulo: 'Ações', render: e => `<div class="acoes-linha">
+        <button class="btn sec sm" onclick="modalProva('${e.id}')">Editar</button>
         <button class="btn sec sm" onclick="publicarProva('${e.id}')">${e.status === 'publicado' ? 'Republicar' : 'Publicar'}</button>
-        <a class="btn sec sm" href="#/prova/${e.id}">Ver</a>` }
+        <a class="btn sec sm" href="#/prova/${e.id}">Ver</a>
+        <button class="btn sec sm perigo" onclick="excluirProva('${e.id}')">Excluir</button></div>` }
     ], pg.itens)}</div>
     ${pg.total > 1 ? paginador(pg, rota, 'pag') : ''}`;
   };
@@ -5150,6 +5300,74 @@ function adProvas() {
     <div id="prvArea">${corpo(params.q || '', paginaAtual(params, 'pag'))}</div>
     <div class="fonte-linha">Publicar cria nova versão com data e autor. A versão anterior fica recuperável. As provas importadas do ranking oficial não trazem jurados no documento original — defina a dupla no botão Editar.</div>
   </div>`;
+}
+
+/* ---------------------------------------------------------------
+   EXCLUIR PROVA
+   A prova carrega inscrições, médias por etapa, classificações e as
+   duplas de jurados. A exclusão lista tudo isso antes de apagar, e o
+   ranking oficial importado fica protegido: apagar daqui não reescreve
+   a fonte, mas some com o que o portal tem.
+   --------------------------------------------------------------- */
+function resumoProva(evId) {
+  const ins = S.inscricoes.filter(i => i.eventoId === evId);
+  const ids = new Set(ins.map(i => i.id));
+  return {
+    inscricoes: ins.length,
+    notas: S.notas.filter(n => ids.has(n.inscricaoId)).length,
+    resultados: S.resultados.filter(r => ids.has(r.inscricaoId)).length,
+    sessoes: S.sessoes.filter(s => s.eventoId === evId).length,
+    oficiais: S.resultados.filter(r => ids.has(r.inscricaoId) && r.selo === 'oficial').length,
+    doRanking: !!(eventoDe(evId) || {}).doRanking
+  };
+}
+
+function excluirProva(evId) {
+  const e = eventoDe(evId);
+  if (!e) return toast('Prova não encontrada.', 'erro');
+  const r = resumoProva(evId);
+
+  const itens = [];
+  if (r.inscricoes) itens.push(`${r.inscricoes} inscrição(ões)`);
+  if (r.notas) itens.push(`${r.notas} média(s) de etapa`);
+  if (r.resultados) itens.push(`${r.resultados} classificação(ões)`);
+  if (r.sessoes) itens.push(`${r.sessoes} sessão(ões) de julgamento`);
+
+  abrirModal(`<div class="linha entre"><h3>Excluir prova</h3><button class="fechar" onclick="fecharModal()">×</button></div>
+    <p class="pequeno mt-sm">${esc(e.nome)} · ${dataBR(e.dataInicio)} · ciclo ${esc(e.ciclo || '')}</p>
+    ${itens.length
+      ? `<div class="aviso aviso-atencao"><b>Ao excluir, também sai:</b><br>${itens.join('<br>')}.</div>`
+      : '<div class="aviso aviso-info">Esta prova não tem inscrição, média nem classificação — sai só o cadastro dela.</div>'}
+    ${r.oficiais ? `<div class="aviso aviso-atencao"><b>Atenção:</b> ${r.oficiais} resultado(s) desta prova vieram de documento oficial. Excluir aqui <b>não</b> altera o documento da ABCCC — mas o portal deixa de exibir esses conjuntos até que a fonte seja reimportada.</div>` : ''}
+    ${r.doRanking ? `<div class="aviso aviso-erro">Esta é uma prova de <b>ranking oficial importado</b>. Excluí-la remove ${r.inscricoes} conjunto(s) do ranking deste ciclo no portal. Se a intenção é só corrigir, use Editar.</div>` : ''}
+    <div class="campo mt"><label>Motivo (vai para a auditoria)</label>
+      <input id="excPrvMotivo" placeholder="ex.: prova cadastrada em duplicidade"></div>
+    <div class="form-acoes">
+      <button class="btn perigo" onclick="confirmarExclusaoProva('${evId}')">Excluir prova</button>
+      <button class="btn sec" onclick="fecharModal()">Cancelar</button>
+    </div>`);
+}
+
+function confirmarExclusaoProva(evId) {
+  const e = eventoDe(evId);
+  if (!e) return;
+  const motivo = (($('#excPrvMotivo') || {}).value || '').trim() || 'Exclusão pelo painel';
+  const r = resumoProva(evId);
+
+  Motor.auditar('Exclusão de prova', e.nome + ' · ' + dataBR(e.dataInicio),
+    r.inscricoes + ' inscrição(ões) · ' + r.notas + ' média(s) · ' + r.resultados + ' classificação(ões)',
+    '', motivo, e.documento || '');
+
+  const ids = new Set(S.inscricoes.filter(i => i.eventoId === evId).map(i => i.id));
+  S.notas = S.notas.filter(n => !ids.has(n.inscricaoId));
+  S.resultados = S.resultados.filter(x => !ids.has(x.inscricaoId));
+  S.inscricoes = S.inscricoes.filter(i => i.eventoId !== evId);
+  S.sessoes = S.sessoes.filter(s => s.eventoId !== evId);
+  S.eventos = S.eventos.filter(x => x.id !== evId);
+
+  salvar(); fecharModal();
+  toast('Prova excluída: ' + e.nome + '.');
+  render();
 }
 
 function modalProva(id) {
