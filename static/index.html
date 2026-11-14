@@ -555,6 +555,17 @@ async function carregarDadosDoServidor() {
       const soLocal = (S[col] || []).filter(x => x && x.id != null && !mapa.has(String(x.id)));
       S[col] = pacote[col].concat(soLocal);
     });
+      /* exclusões gravadas no banco: junta com as deste navegador */
+      const exc = pacote.exclusoes;
+      if (exc && typeof EXCLUIDOS !== 'undefined') {
+        ['eventos', 'inscricoes'].forEach(tipo => {
+          const doBanco = Array.isArray(exc[tipo]) ? exc[tipo] : [];
+          const atual = EXCLUIDOS[tipo] || [];
+          const juntos = Array.from(new Set(atual.concat(doBanco.map(String))));
+          EXCLUIDOS[tipo] = juntos;
+        });
+        Store.set(CHAVE_EXCLUIDOS, EXCLUIDOS);
+      }
     return true;
   } catch (e) { return false; }
 }
@@ -584,6 +595,9 @@ function sincronizarDados(imediato) {
     try {
       const colecoes = {};
       COLECOES_SINC.forEach(c => { if (Array.isArray(S[c])) colecoes[c] = S[c]; });
+      /* exclusões viajam junto: sem isto a prova apagada voltaria ao abrir
+         o portal em outro aparelho (ou depois de limpar o navegador) */
+      if (typeof EXCLUIDOS !== 'undefined') colecoes.exclusoes = EXCLUIDOS;
       await api('/admin/dados', { method: 'PUT', body: JSON.stringify({ colecoes }) });
       API.ultimoSalvo = new Date().toISOString();
       API.erroSalvar = null;
@@ -1055,7 +1069,11 @@ function gerarBase() {
 const COLECOES_DE_PESSOAS = [
   'eventos', 'inscricoes', 'resultados', 'notas', 'sessoes',
   'cavalos', 'ginetes', 'jurados', 'nucleos', 'usuarios', 'anuncios',
-  'solicitacoes', 'auditoria', 'importacoes'
+  'solicitacoes', 'auditoria', 'importacoes',
+  /* `ciclos` entrou aqui porque o cadastro de ciclo existe no painel e era
+     o ÚNICO que não era salvo: editava, a tela dizia "Ciclo salvo" e o
+     valor voltava ao da base no próximo carregamento. */
+  'ciclos'
 ];
 
 /* mescla os dados guardados por cima da base recém-gerada */
@@ -1071,6 +1089,9 @@ function juntarDados(base, guardado) {
     g.forEach(item => {
       if (!item || item.id == null) return;
       const k = String(item.id);
+      /* excluído de propósito não volta nem do cofre local */
+      if ((col === 'eventos' && ehExcluido('eventos', k))
+        || (col === 'inscricoes' && ehExcluido('inscricoes', k))) return;
       if (porIdAtual.has(k)) Object.assign(porIdAtual.get(k), item);  /* guardado ganha */
       else { base[col].push(item); porIdAtual.set(k, item); }
     });
@@ -1092,8 +1113,74 @@ function extrairDadosDe(s) {
   COLECOES_DE_PESSOAS.forEach(c => { if (Array.isArray(s[c])) out[c] = s[c]; });
   ['banners', 'config', 'analytics', 'favoritos', 'calendario'].forEach(k => { if (s[k] != null) out[k] = s[k]; });
   out.versao = 6;
+  out.excluidos = EXCLUIDOS;
   out.salvoEm = new Date().toISOString();
   return out;
+}
+
+/* IDs de prova e de inscrição que o operador apagou de propósito.
+
+   O banco continua com a linha (a exclusão é feita no app, não com DELETE),
+   e na abertura `carregarDadosDoServidor()` ANEXA tudo o que o banco tem —
+   era assim que a prova excluída voltava a cada upload. Esta lista de
+   exclusões é gravada e enviada junto com o resto: o que está nela é
+   descartado depois de carregar o servidor e não aparece mais. */
+const CHAVE_EXCLUIDOS = CHAVE_DADOS + '-excluidos';
+
+let EXCLUIDOS = (() => {
+  const g = Store.get(CHAVE_EXCLUIDOS, null);
+  return {
+    eventos: Array.isArray(g && g.eventos) ? g.eventos.slice() : [],
+    inscricoes: Array.isArray(g && g.inscricoes) ? g.inscricoes.slice() : []
+  };
+})();
+
+function marcarExcluido(tipo, id) {
+  if (!id) return;
+  const lista = EXCLUIDOS[tipo];
+  if (!Array.isArray(lista)) return;
+  if (!lista.includes(String(id))) lista.push(String(id));
+  Store.set(CHAVE_EXCLUIDOS, EXCLUIDOS);
+}
+
+function ehExcluido(tipo, id) {
+  const lista = EXCLUIDOS[tipo];
+  return Array.isArray(lista) && lista.includes(String(id));
+}
+
+/* tira do estado tudo o que foi excluído de propósito. Chamado depois de
+   carregar o servidor, porque é ele que traz a linha de volta. */
+function aplicarExclusoes() {
+  if (!EXCLUIDOS.eventos.length && !EXCLUIDOS.inscricoes.length) return 0;
+  let removidos = 0;
+
+  const evFora = new Set(EXCLUIDOS.eventos);
+  const insFora = new Set(EXCLUIDOS.inscricoes);
+  /* inscrição de prova excluída também sai */
+  (S.inscricoes || []).forEach(i => { if (evFora.has(String(i.eventoId))) insFora.add(String(i.id)); });
+
+  const antesE = (S.eventos || []).length;
+  S.eventos = (S.eventos || []).filter(e => !evFora.has(String(e.id)));
+  removidos += antesE - S.eventos.length;
+
+  const antesI = (S.inscricoes || []).length;
+  S.inscricoes = (S.inscricoes || []).filter(i => !insFora.has(String(i.id)));
+  removidos += antesI - S.inscricoes.length;
+
+  const antesN = (S.notas || []).length;
+  S.notas = (S.notas || []).filter(n => !insFora.has(String(n.inscricaoId)));
+  removidos += antesN - S.notas.length;
+
+  const antesR = (S.resultados || []).length;
+  S.resultados = (S.resultados || []).filter(r => !insFora.has(String(r.inscricaoId))
+    && !evFora.has(String(r.eventoId)));
+  removidos += antesR - S.resultados.length;
+
+  const antesS = (S.sessoes || []).length;
+  S.sessoes = (S.sessoes || []).filter(s => !evFora.has(String(s.eventoId)));
+  removidos += antesS - S.sessoes.length;
+
+  return removidos;
 }
 
 let S = (() => {
@@ -1196,6 +1283,33 @@ function normalizarCadastros() {
   return mexidos;
 }
 
+/* ciclo do painel: garante os campos que as telas leem. `ciclos` passou a
+   ser persistido, então um valor gravado por versão anterior (ou criado
+   sem regra) chegava sem `regra` e a tela de Ciclos morria no
+   `c.regra.desempate`. */
+function normalizarCiclos() {
+  let mexidos = 0;
+  (S.ciclos || []).forEach(c => {
+    if (!c) return;
+    if (!c.regra || typeof c.regra !== 'object') { c.regra = {}; mexidos++; }
+    const padrao = { metade: 12, pontos: [12, 10, 8, 6], concluinte: 4, naoConcluinte: 2,
+      habilita: 12, vagasFinal: 48, desempate: 'menor número de participações no ciclo' };
+    Object.keys(padrao).forEach(k => {
+      if (c.regra[k] == null) { c.regra[k] = padrao[k]; mexidos++; }
+    });
+    if (!c.nome) { c.nome = 'Ciclo ' + c.id; mexidos++; }
+    if (!c.inicio) { c.inicio = c.id + '-01-01'; mexidos++; }
+    if (!c.fim) { c.fim = c.id + '-12-31'; mexidos++; }
+    if (!c.etapasPorGrupo) { c.etapasPorGrupo = { A: ETAPAS_A, B: ETAPAS_B }; mexidos++; }
+    if (!c.doc) { c.doc = 'Regulamento do Freio do Proprietário — ciclo ' + c.id; mexidos++; }
+  });
+  /* o ciclo ativo tem de existir na lista, senão as telas abrem vazias */
+  if (S.ciclos && S.ciclos.length && !S.ciclos.some(c => c.id === S.cicloAtivo)) {
+    S.cicloAtivo = S.ciclos[S.ciclos.length - 1].id; mexidos++;
+  }
+  return mexidos;
+}
+
 function salvar() {
   Store.set(CHAVE_DADOS, extrairDadosDe(S));
   /* publicado + com sessão? grava também no banco, para valer em qualquer
@@ -1217,7 +1331,16 @@ const gineteDe = (id) => porId(S.ginetes, id);
 const categoriaDe = (id) => CATEGORIAS.find(c => c.id === id) || { id, nome: id, curto: id };
 const eventoDe = (id) => porId(S.eventos, id);
 const juradoDe = (id) => porId(S.jurados, id);
-const cicloDe = (id) => S.ciclos.find(c => c.id === id);
+/* ciclo de um id. Nunca devolve undefined: quem chama usa `.regra`,
+   `.nome` e `.doc` direto, e o cadastro permite id com espaço/caixa
+   diferente do que estava gravado — era o que quebrava a tela de Ciclos
+   depois de editar. */
+const cicloDe = (id) => {
+  if (id == null) return null;
+  const bruto = String(id).trim();
+  return (S.ciclos || []).find(c => c && (String(c.id) === bruto
+      || norm(String(c.id)) === norm(bruto))) || null;
+};
 const nomeCavalo = (id) => (cavalo(id) || {}).nome || '—';
 const nomeGinete = (id) => (gineteDe(id) || {}).nome || '—';
 
@@ -2690,7 +2813,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 20:04 · 03074a2</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 20:15 · 8d386bf</p>
       </div>
     </div>
   </div></footer>`;
@@ -5177,7 +5300,7 @@ function adCiclos() {
       { titulo: 'Situação', render: c => selo(c.status === 'publicado' ? 'oficial' : 'provisorio', c.status) },
       { titulo: 'Etapas A / B', render: c => `<span class="mini">8 / 6</span>` },
       { titulo: 'Ordenação', render: c => `<span class="mini">média final (Art. 15)</span>` },
-      { titulo: 'Desempate', render: c => `<span class="mini">${esc(c.regra.desempate)}</span>` },
+      { titulo: 'Desempate', render: c => `<span class="mini">${esc((c.regra || {}).desempate || '—')}</span>` },
       { titulo: 'Categorias', num: true, render: c => CATEGORIAS.length },
       { titulo: 'Aprovado por', render: c => `<span class="mini">${esc(c.aprovadoPor || '—')}</span>` },
       { titulo: '', render: c => `<button class="btn sec sm" onclick="modalCiclo('${c.id}')">Editar</button>` }
@@ -5198,10 +5321,10 @@ function modalCiclo(id) {
         <div class="campo"><label>Etapas categorias B</label><input value="6 (fixo pelo regulamento)" readonly></div>
       </div>
       <div class="linha-form">
-        <div class="campo"><label>Pontos para habilitar</label><input id="ciHabilita" type="number" min="1" value="${c ? c.regra.habilita : 12}"></div>
-        <div class="campo"><label>Vagas na Final por categoria</label><input id="ciVagas" type="number" min="1" value="${c ? c.regra.vagasFinal : 48}"></div>
+        <div class="campo"><label>Pontos para habilitar</label><input id="ciHabilita" type="number" min="1" value="${c ? (c.regra || {}).habilita : 12}"></div>
+        <div class="campo"><label>Vagas na Final por categoria</label><input id="ciVagas" type="number" min="1" value="${c ? (c.regra || {}).vagasFinal : 48}"></div>
       </div>
-      <div class="campo"><label>Critério de desempate</label><input id="ciDesempate" value="${c ? esc(c.regra.desempate) : 'menor número de participações no ciclo'}"></div>
+      <div class="campo"><label>Critério de desempate</label><input id="ciDesempate" value="${esc(c ? ((c.regra || {}).desempate || 'menor número de participações no ciclo') : 'menor número de participações no ciclo')}"></div>
       <div class="campo"><label>Aprovado por</label><input id="ciAprov" value="${c ? esc(c.aprovadoPor) : ''}" placeholder="Pessoa/comissão que aprovou"></div>
       <div class="campo"><label>Situação</label><select id="ciStatus"><option value="rascunho" ${c && c.status === 'rascunho' ? 'selected' : ''}>Rascunho</option><option value="publicado" ${!c || c.status === 'publicado' ? 'selected' : ''}>Publicado</option></select></div>
       <div class="aviso aviso-info">As etapas (8 nas categorias A e 6 nas B) vêm do regulamento e não são editáveis aqui: mudar etapa muda todos os números.</div>
@@ -5209,16 +5332,31 @@ function modalCiclo(id) {
     </form>`);
   $('#fCiclo').onsubmit = (ev) => {
     ev.preventDefault();
-    const idNovo = c ? c.id : $('#ciId').value.trim();
-    if (!c && S.ciclos.some(x => x.id === idNovo)) return toast('Já existe um ciclo com esse identificador.', 'erro');
-    const antes = c ? JSON.stringify(c.regra) : '';
+    /* identificador é o ANO: normaliza para não criar "2028 " e "2028"
+       como dois ciclos diferentes */
+    const idNovo = c ? c.id : String($('#ciId').value || '').trim();
+    if (!idNovo) return toast('Informe o identificador do ciclo.', 'erro');
+    if (!/^\d{4}$/.test(idNovo)) return toast('O identificador do ciclo é o ano, com 4 dígitos (ex.: 2028).', 'erro');
+    if (!c && S.ciclos.some(x => String(x.id) === idNovo)) return toast('Já existe um ciclo com esse identificador.', 'erro');
+    const antes = c ? JSON.stringify(c.regra || {}) : '';
     if (c) {
-      c.regra.habilita = Number($('#ciHabilita').value);
-      c.regra.vagasFinal = Number($('#ciVagas').value);
-      c.regra.desempate = $('#ciDesempate').value.trim();
+      /* a regra pode faltar em ciclo criado por versão anterior: cria antes */
+      if (!c.regra || typeof c.regra !== 'object') c.regra = {};
+      c.regra.habilita = Number($('#ciHabilita').value) || 12;
+      c.regra.vagasFinal = Number($('#ciVagas').value) || 48;
+      c.regra.desempate = $('#ciDesempate').value.trim() || 'menor número de participações no ciclo';
       c.doc = $('#ciDoc').value.trim();
       c.aprovadoPor = $('#ciAprov').value.trim();
       c.status = $('#ciStatus').value;
+      /* campos que a tela mostra e que podem faltar */
+      if (!c.nome) c.nome = 'Ciclo ' + c.id;
+      if (!c.inicio) c.inicio = c.id + '-01-01';
+      if (!c.fim) c.fim = c.id + '-12-31';
+      if (!c.etapasPorGrupo) c.etapasPorGrupo = { A: ETAPAS_A, B: ETAPAS_B };
+      if (!Array.isArray(c.regra.pontos)) c.regra.pontos = [12, 10, 8, 6];
+      if (c.regra.metade == null) c.regra.metade = 12;
+      if (c.regra.concluinte == null) c.regra.concluinte = 4;
+      if (c.regra.naoConcluinte == null) c.regra.naoConcluinte = 2;
     } else {
       S.ciclos.push({
         id: idNovo, nome: 'Ciclo ' + idNovo, inicio: idNovo + '-01-01', fim: idNovo + '-12-31',
@@ -5232,7 +5370,8 @@ function modalCiclo(id) {
         }
       });
     }
-    Motor.auditar(c ? 'Alteração de regulamento' : 'Criação de ciclo', 'Ciclo ' + idNovo, antes, JSON.stringify(c ? c.regra : { habilita: $('#ciHabilita').value }), $('#ciAprov').value || 'sem aprovador informado', $('#ciDoc').value);
+    S.ciclos.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    Motor.auditar(c ? 'Alteração de regulamento' : 'Criação de ciclo', 'Ciclo ' + idNovo, antes, JSON.stringify(c ? (c.regra || {}) : { habilita: $('#ciHabilita').value }), $('#ciAprov').value || 'sem aprovador informado', $('#ciDoc').value);
     salvar(); fecharModal(); toast('Ciclo salvo.'); render();
   };
 }
@@ -5454,6 +5593,12 @@ async function confirmarExclusaoProva(evId) {
     '', motivo, e.documento || '');
 
   const ids = new Set(S.inscricoes.filter(i => i.eventoId === evId).map(i => i.id));
+
+  /* registra a exclusão: sem isto, o banco devolve a prova na próxima
+     abertura e ela "volta sozinha" */
+  marcarExcluido('eventos', evId);
+  ids.forEach(id => marcarExcluido('inscricoes', id));
+
   S.notas = S.notas.filter(n => !ids.has(n.inscricaoId));
   S.resultados = S.resultados.filter(x => !ids.has(x.inscricaoId));
   S.inscricoes = S.inscricoes.filter(i => i.eventoId !== evId);
@@ -5962,6 +6107,7 @@ async function confirmarExclusaoInscricao(insId) {
     }
   }
 
+  marcarExcluido('inscricoes', insId);
   recalcularProva(ins.eventoId);
   salvar(); fecharModal();
 
@@ -9483,15 +9629,27 @@ function iniciar() {
     if (m) { salvar(); console.log('[normalização] ' + m + ' campo(s) de cadastro completado(s)'); }
   } catch (e) { console.warn('[normalização] falhou:', e.message); }
 
+  try {
+    const c = (typeof normalizarCiclos === 'function') ? normalizarCiclos() : 0;
+    if (c) { salvar(); console.log('[normalização] ' + c + ' campo(s) de ciclo completado(s)'); }
+  } catch (e) { console.warn('[normalização] ciclo falhou:', e.message); }
+
   /* Se houver servidor, carrega o banco antes de desenhar a primeira tela.
      Sem servidor (arquivo aberto direto), segue com a base embutida. */
   if (typeof apiIniciar === 'function' && API.base) {
     apiIniciar().then(() => {
+      /* o banco é a fonte verdadeira e traz de volta o que foi excluído
+         aqui (a exclusão é do app, não um DELETE na tabela). Aplicar a
+         lista de exclusões DEPOIS de carregar é o que impede a prova de
+         ressuscitar a cada abertura. */
+      try { aplicarExclusoes(); } catch (e) { console.warn('[exclusões] falhou:', e.message); }
+      try { normalizarCadastros(); } catch (e) { }
       const tok = Store.get(CHAVE + '-token', null);
       if (tok) { API.token = tok; }
       render();
     });
   } else {
+    try { aplicarExclusoes(); } catch (e) { }
     render();
   }
 
