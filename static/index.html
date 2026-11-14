@@ -1750,6 +1750,9 @@ nav.menu a.on{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
 .btn.sec.perigo{background:transparent;border-color:var(--vermelho);color:var(--vermelho)}
 .btn.sec.perigo:hover{background:var(--vermelho);color:#fff;filter:none}
+.rodape-aviso{border-bottom:1px solid rgba(255,255,255,.14);padding-bottom:12px;margin-bottom:16px;
+  font-size:12.5px;line-height:1.55;opacity:.9}
+.rodape-aviso b{color:#fff;font-weight:700}
 .acoes-linha{white-space:nowrap;text-align:right}
 .acoes-linha .btn+.btn{margin-left:6px}
 @media(max-width:560px){
@@ -2596,11 +2599,15 @@ function ligarNav() {
 
 function rodapeHTML() {
   return `<footer class="rodape"><div class="wrap">
+    <div class="rodape-aviso">
+      <b>Dados não oficiais.</b> Este portal reúne informações de caráter informativo e não substitui os canais da ABCCC.
+      Os dados oficiais, com fé pública, são os publicados no site da Associação.
+    </div>
     <div class="cols">
       <div>
         <h4>Portal Freio do Proprietário</h4>
         <p>Rankings do ciclo ${esc(S.cicloAtivo)} das seis categorias da modalidade.</p>
-        <p><b>Base oficial.</b> Posição, pontos e nota vêm dos rankings publicados pela ABCCC. O que o documento não traz — registro do animal, pelagem, criador, profissão do ginete — fica em branco para ser completado no cadastro.</p>
+        <p>Rankings, provas, cavalos e ginetes da modalidade, em um só lugar.</p>
       </div>
       <div>
         <h4>Consulta</h4>
@@ -2611,8 +2618,8 @@ function rodapeHTML() {
       <div>
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
-        <p class="mini">Base oficial de ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-13 17:46 · d4b7cf2</p>
+        <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 01:00 · f9700ce</p>
       </div>
     </div>
   </div></footer>`;
@@ -2694,7 +2701,13 @@ function pgInicio(el, r) {
   const disp = ciclosDisponiveis();
   const c = cicloDe(ciclo) || disp[disp.length - 1];
   const cicloOk = c && c.disponivel !== false ? c.id : (disp[disp.length - 1] || {}).id;
-  const conteudo = S.resultados.filter(x => x.ciclo === cicloOk && x.origem !== 'final');
+  /* O ranking é a fonte do número: ele agrupa por animal e categoria e calcula
+     `habilitado` a partir dos pontos (12 = habilitado, Art. 15, §1º). Contar
+     direto em S.resultados usava o campo `habilitado` cru do documento, que
+     vem vazio em boa parte das linhas importadas — a home mostrava 2 quando
+     são 7. */
+  const rk = Motor.ranking({ ciclo: cicloOk });
+  const conteudo = rk.linhas;
   const hab = conteudo.filter(x => x.habilitado).length;
 
   el.innerHTML = `
@@ -2716,9 +2729,8 @@ function pgInicio(el, r) {
   <div class="faixa-info">
     <span><b>${num(conteudo.length)}</b> conjuntos</span>
     <span><b>${num(hab)}</b> habilitados</span>
-    <span><b>${num(new Set(S.inscricoes.filter(i => i.ciclo === cicloOk && i.eventoId !== 'ev-final-2026').map(i => i.cavaloId)).size)}</b> cavalos</span>
-    <span><b>${num(new Set(S.inscricoes.filter(i => i.ciclo === cicloOk && i.eventoId !== 'ev-final-2026').map(i => i.gineteId)).size)}</b> ginetes</span>
-    <span class="fi-fonte">${esc((c || {}).doc || '')}</span>
+    <span><b>${num(new Set(conteudo.map(l => l.cavaloId)).size)}</b> cavalos</span>
+    <span><b>${num(new Set(conteudo.map(l => l.gineteId)).size)}</b> ginetes</span>
   </div>
 
   ${(() => {
@@ -2727,7 +2739,7 @@ function pgInicio(el, r) {
     const total = conteudo.length;
     if (total > 40) return '';
     const anterior = disp.filter(x => x.id !== cicloOk).sort((a, b) => b.id.localeCompare(a.id))[0];
-    const nAnt = anterior ? S.resultados.filter(x => x.ciclo === anterior.id && x.origem !== 'final').length : 0;
+    const nAnt = anterior ? Motor.ranking({ ciclo: anterior.id }).linhas.length : 0;
     return `<div class="aviso-ciclo">
       <span><b>Ciclo ${esc(cicloOk)} em andamento</b> — ${num(total)} conjunto${total === 1 ? '' : 's'} publicado${total === 1 ? '' : 's'} até agora.</span>
       ${anterior && nAnt ? `<a href="#/inicio?ciclo=${esc(anterior.id)}">Ver ciclo ${esc(anterior.id)} (${num(nAnt)}) →</a>` : ''}
@@ -2768,7 +2780,7 @@ function pgInicio(el, r) {
   ${bannerRotativo('listas')}
 
   <div class="linha entre mt" style="gap:10px">
-    <span class="mini fraco">Base: rankings oficiais da ABCCC.</span>
+    <span></span>
     <span class="linha" style="gap:7px">
       <a class="btn sec sm" href="#/final">Final ${esc(cicloOk)}</a>
       <a class="btn sec sm" href="#/rankings?ciclo=${cicloOk}">Todos os rankings</a>
@@ -2879,7 +2891,6 @@ function pgRankings(el, r) {
 
     <div id="rankResto">
     ${vista === 'oficial' ? `
-      <div class="aviso aviso-info mt-sm">${selo('oficial')} Ranking recebido da fonte oficial, exibido sem recálculo. As seis categorias do ciclo 2026 têm base importada.</div>
       ${ofi.length ? tabela([
         { titulo: 'Pos.', num: true, render: x => `<span class="pos" style="font-family:Georgia,serif;font-weight:700;color:var(--azul)">${x.posicao}º</span>` },
         { titulo: 'Competidor', render: x => `<b>${esc(x.nomeGinete)}</b>` },
@@ -2889,14 +2900,9 @@ function pgRankings(el, r) {
         { titulo: 'Fonte', render: x => selo('oficial') }
       ], ofi, { classe: 'rank' }) : vazio('Nenhum ranking oficial importado para este recorte.')}
     ` : `
-      <div class="aviso aviso-info mt-sm">${selo('oficial')} Ranking do ciclo ${esc(ciclo)}: ordena primeiro pelos <b>pontos</b> de credenciamento (12 = habilitado, depois 10/8/6/4/2) e, dentro do mesmo ponto, pela <b>maior média</b> do cavalo — a melhor nota dele no ciclo. A posição publicada pela ABCCC é preservada; o portal não reordena lista oficial.</div>
       ${blocoInicial}
       ${divs.length ? `<div class="aviso aviso-atencao mt-sm"><b>${divs.length} divergência(s) entre o ranking oficial e o cálculo.</b> Ficam pendentes de revisão e nada é corrigido em silêncio. <button class="btn sec sm" onclick="modalDivergencias('${ciclo}','${cat}')">Ver lista</button></div>` : ''}
     `}
-    </div>
-    <div class="fonte-linha">
-      ${selo('derivado')} estatística calculada · ${selo('oficial')} documento de origem · ${selo('conferido')} transcrição revisada.<br>
-      Pontuação de habilitação não é nota de prova, e média do conjunto não é pontuação de ranking: cada coluna mede uma coisa só.
     </div>
   </div>`;
 
@@ -8643,7 +8649,7 @@ function pgSobre(el) {
     <div class="card">
       <h2>Demonstração ou futuro</h2>
       <ul class="pequeno" style="padding-left:18px;line-height:1.75">
-        <li><b>Dados</b>: <b>reais</b> — 495 conjuntos do ranking oficial ABCCC do ciclo 2026 (documentos 2640403909 e 8743059010), conferidos linha a linha. O que o PDF não traz (registro, pelagem, criador, profissão do ginete, jurados) fica em branco para preenchimento no cadastro.</li>
+        <li><b>Dados</b>: <b>não oficiais</b> — este portal reúne informações de caráter informativo (495 conjuntos do ciclo 2026, transcritos dos documentos da ABCCC e conferidos linha a linha) e <b>não substitui</b> os canais da Associação. Os dados com fé pública são os publicados no site da ABCCC. O que o documento não traz (registro, pelagem, criador, profissão do ginete, jurados) fica em branco para preenchimento no cadastro.</li>
         <li><b>Jurados, sessões e genealogia</b>: sem dados na fonte oficial; as telas existem e são alimentadas pelo cadastro administrativo.</li>
         <li><b>Acesso</b>: só geral e administrativo. Não há área de competidor (decisão de 08/11).</li>
         <li><b>Login</b>: contas de teste; produção exige hash, sessão e MFA no servidor.</li>
