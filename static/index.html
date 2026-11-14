@@ -2439,6 +2439,37 @@ table.tab-comp-final td .mini{margin-top:1px}
 .pl-icone img{width:100%;height:100%;object-fit:cover}
 .pl-icone span{color:#fff;font-family:Georgia,serif;font-size:26px;font-weight:700}
 
+/* ================= ENTRADA DE FICHA (Notas do Animal) ================= */
+.fc-etapas{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}
+.fc-etapas>*{min-width:0}
+.fc-etapa{display:flex;flex-direction:column;gap:4px;background:var(--papel);
+  border:1px solid var(--linha);border-radius:11px;padding:9px 10px}
+.fc-etapa label{font-size:12px;font-weight:600;color:var(--texto-fraco);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fc-etapa input{width:100%;border:0;background:transparent;padding:2px 0;
+  font:600 17px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  color:var(--texto);outline:none}
+.fc-etapa input.fc-erro{color:var(--vermelho)}
+.fc-etapa:focus-within{border-color:var(--azul-2);box-shadow:0 0 0 3px rgba(43,84,128,.12)}
+.fc-card{background:var(--papel);border:1px solid var(--linha);border-radius:var(--raio);padding:16px}
+.fc-topo{display:flex;flex-direction:column;gap:2px;padding-bottom:10px;border-bottom:1px solid var(--linha-2);margin-bottom:10px}
+.fc-topo b{font-family:Georgia,serif;font-size:18px}
+.fc-bloco{margin-top:12px}
+.fc-sub{font-size:12.5px;font-weight:700;color:var(--texto-fraco);text-transform:uppercase;
+  letter-spacing:.4px;margin-bottom:8px}
+.fc-check{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:7px 0;border-bottom:1px dashed var(--linha-2);font-size:14px}
+.fc-check:last-child{border-bottom:0}
+.fc-rot{color:var(--texto-fraco)}
+.fc-val{text-align:right;display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.fc-nota-l{display:flex;align-items:baseline;gap:8px;padding:5px 0;border-bottom:1px dashed var(--linha-2);font-size:14px}
+.fc-nota-l span:first-child{flex:1;color:var(--texto-fraco)}
+.fc-nota-l b{font-variant-numeric:tabular-nums;font-size:15px;min-width:62px;text-align:right}
+.fc-total{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  margin-top:10px;padding:10px 12px;background:#f2ede1;border-radius:11px}
+.fc-total span{font-size:13px;color:var(--texto-fraco)}
+.fc-total b{font-family:Georgia,serif;font-size:21px;font-variant-numeric:tabular-nums}
+
 `;
 
 function injetarCSS() {
@@ -2619,7 +2650,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 01:00 · f9700ce</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 18:23 · 6e36220</p>
       </div>
     </div>
   </div></footer>`;
@@ -4980,7 +5011,7 @@ function confirmarExclusao() {
 const MENU_ADMIN = [
   ['visao', 'Visão geral'], ['ciclos', 'Ciclos e regulamentos'], ['provas', 'Provas'],
   ['credenciadoras', 'Credenciadoras'],
-  ['inscricoes', 'Inscrições'], ['sumulas', 'Súmulas e médias'], ['sessoes', 'Sessões de julgamento'],
+  ['inscricoes', 'Inscrições'], ['ficha', 'Entrada de ficha'], ['sumulas', 'Súmulas e médias'], ['sessoes', 'Sessões de julgamento'],
   ['cavalos', 'Cadastro de cavalos'], ['ginetes', 'Cadastro de ginetes'], ['jurados', 'Cadastro de jurados'],
   ['nucleos', 'Núcleos promotores'],
   ['rankings', 'Rankings'], ['importar', 'Importações'], ['maestro', 'Maestro'],
@@ -4995,7 +5026,7 @@ function pgAdmin(el, r) {
   const sub = r.sub || 'visao';
   const mapa = {
     visao: adVisao, ciclos: adCiclos, provas: adProvas, credenciadoras: adCredenciadoras,
-    inscricoes: adInscricoes, sumulas: adSumulas,
+    inscricoes: adInscricoes, ficha: adFicha, sumulas: adSumulas,
     sessoes: adSessoes, jurados: adJurados, cavalos: adCavalos, ginetes: adGinetes, nucleos: adNucleos, rankings: adRankings,
     importar: adImportar, maestro: adMaestro, banners: adBanners, analytics: adAnalytics,
     identidade: adIdentidade,
@@ -7129,6 +7160,13 @@ const MAESTRO_MODELOS = {
     exemplo: 'categoria;ginete;cavalo;registro;etapa;nota\nAmador A;Diego Vechi;Temporal dos Três Pinhais;213;Andadura;7,10\nAmador A;Diego Vechi;Temporal dos Três Pinhais;213;Figura;7,50',
     descricao: 'Uma linha por nota de etapa. O Maestro soma por conjunto e calcula a média pela quantidade de etapas do grupo (A = 8, B = 6).'
   },
+  ficha: {
+    nome: 'Ficha de um conjunto (Notas do Animal)',
+    colunas: ['categoria', 'ginete', 'cavalo', 'registro', 'box', 'mae', 'pai', 'andadura', 'figura', 'vsp', 'mangueira1', 'mangueira2', 'bayard'],
+    exemplo: 'categoria;ginete;cavalo;registro;box;mae;pai;andadura;figura;vsp;mangueira1;mangueira2;bayard\n'
+      + 'Amador B;WILLIAN COMPAGNONI MOCELLIN;SANTA JÚLIA IGUALITA;;15;LUMINOSA DOS TRÊS PINHAIS;BEM CRIADO CALA BASSA;8,100;6,000;6,875;1,500;6,000;5,000',
+    descricao: 'Uma linha por conjunto, com a média de cada etapa na sua coluna. É o formato da tela "Notas do Animal".'
+  },
   ranking: {
     nome: 'Ranking oficial (uma linha por conjunto)',
     colunas: ['categoria', 'posicao', 'cavalo', 'ginete', 'pontos', 'media'],
@@ -7192,8 +7230,18 @@ function maestroMapear(cabecalhos) {
     pelagem: ['pelagem', 'pelo'],
     nascimento: ['nascimento', 'nasc', 'data de nascimento'],
     criador: ['criador'],
-    pai: ['pai'],
-    mae: ['mae']
+    pai: ['pai', 'nome do pai'],
+    mae: ['mae', 'nome da mae'],
+    /* colunas de MÉDIA POR ETAPA — o formato da tela "Notas do Animal".
+       Cada etapa tem o seu campo, com o id da etapa como chave. */
+    andadura: ['andadura', 'andaduras', 'andadura media'],
+    figura: ['figura', 'figuras'],
+    'vsp-esb': ['vsp', 'esb', 'vsp esb', 'vsp esbarradas', 'vsp/esb', 'esbarradas'],
+    mangueira1: ['mangueira1', 'mangueira 1', 'mangueira i', 'mangueira um'],
+    mangueira2: ['mangueira2', 'mangueira 2', 'mangueira ii', 'mangueira dois'],
+    bayard: ['bayard', 'sarmento', 'bayard sarmento', 'bayard/sarmento'],
+    campo1: ['campo1', 'campo 1', 'campo i'],
+    campo2: ['campo2', 'campo 2', 'campo ii']
   };
   cabecalhos.forEach((c, i) => {
     const k = normCabecalho(c);
@@ -7207,6 +7255,9 @@ function maestroMapear(cabecalhos) {
 /* descobre o modelo pelo conjunto de colunas reconhecidas */
 function maestroDetectar(mapa, totalColunas) {
   const tem = (k) => mapa[k] != null;
+  /* ficha do animal: várias colunas de etapa, uma por média */
+  const colunasEtapa = FICHA_ETAPAS.filter(k => tem(k)).length;
+  if (colunasEtapa >= 3) return 'ficha';
   if (tem('etapa') && tem('nota')) return 'notas';
   if (tem('etapa') && tem('media')) return 'notas';
   if (tem('posicao') && tem('pontos')) return 'ranking';
@@ -7297,6 +7348,67 @@ function maestroProcessar(texto, nomeArquivo, eventoId) {
     });
   }
 
+  if (modelo === 'ficha') {
+    /* Uma linha = um conjunto completo, com a média de cada etapa na sua
+       coluna. É o formato da tela "Notas do Animal" do aplicativo oficial.
+       Aqui não se inventa etapa: só entra a coluna que veio preenchida. */
+    dados.forEach(({ linha, c }) => {
+      const cat = categoriaPorTexto(get(c, 'categoria'));
+      const cavalo = get(c, 'cavalo');
+      const ginete = get(c, 'ginete');
+      if (!cat || !cavalo) {
+        rejeitados.push({ linha, motivo: !cat ? 'categoria não reconhecida' : 'cavalo vazio', bruto: c.join(' ; ') });
+        return;
+      }
+      const catObj = CATEGORIAS.find(x => x.id === cat);
+      const grupo = catObj ? catObj.grupo : 'A';
+      const listaEtapas = grupo === 'B' ? ETAPAS_B : ETAPAS_A;
+      const validas = new Set(listaEtapas.map(e => e.id));
+
+      const notas = [];
+      let problema = '';
+      FICHA_ETAPAS.forEach(etapaId => {
+        if (mapa[etapaId] == null) return;
+        const bruto = get(c, etapaId);
+        if (!bruto.trim() || bruto.trim() === '—' || bruto.trim() === '-') return;
+        if (!validas.has(etapaId)) {
+          problema = `a etapa ${etapaId} não existe no grupo ${grupo}`;
+          return;
+        }
+        const v = numeroBR(bruto);
+        const etapa = listaEtapas.find(e => e.id === etapaId);
+        if (v == null) { problema = `média inválida em ${etapa.nome}: "${bruto}"`; return; }
+        if (v < 0 || v > etapa.maxNota) {
+          problema = `${etapa.nome} aceita até ${String(etapa.maxNota).replace('.', ',')} (veio ${bruto})`;
+          return;
+        }
+        notas.push({ etapaId, valor: v, teto: etapa.maxNota, nome: etapa.nome });
+      });
+
+      if (!notas.length) {
+        rejeitados.push({ linha, motivo: problema || 'nenhuma média preenchida', bruto: c.join(' ; ') });
+        return;
+      }
+
+      const soma = notas.reduce((a, n) => a + n.valor, 0);
+      const divisor = grupo === 'B' ? 6 : 8;
+      aceitos.push({
+        cat, cavalo, ginete, registro: get(c, 'registro'),
+        box: numeroBR(get(c, 'box')),
+        mae: get(c, 'mae'), pai: get(c, 'pai'),
+        notas, quantidade: notas.length, soma,
+        divisor, esperado: listaEtapas.length,
+        media: Math.round(soma / divisor * 1000) / 1000,
+        problema: problema || null
+      });
+
+      if (problema) avisos.push(`${cavalo}: ${problema} — as outras médias entram.`);
+      if (notas.length !== listaEtapas.length) {
+        avisos.push(`${cavalo}: ${notas.length} de ${listaEtapas.length} etapas preenchidas (grupo ${grupo}). A média divide por ${divisor} mesmo assim.`);
+      }
+    });
+  }
+
   if (modelo === 'ranking' || modelo === 'final') {
     dados.forEach(({ linha, c }) => {
       const cat = categoriaPorTexto(get(c, 'categoria'));
@@ -7367,6 +7479,10 @@ function maestroAplicar(plano) {
                 categorias: [a.cat], ciclos: [ciclo], fonte: 'importação', selo: 'informado' };
         S.cavalos.push(cav);
       }
+      /* a ficha do animal traz filiação: aproveita no cadastro */
+      if (a.pai && !cav.paiNome) cav.paiNome = a.pai;
+      if (a.mae && !cav.maeNome) cav.maeNome = a.mae;
+      if (a.registro && !cav.registro) cav.registro = a.registro;
       if (!cav.categorias.includes(a.cat)) cav.categorias.push(a.cat);
       if (!cav.ciclos.includes(ciclo)) cav.ciclos.push(ciclo);
 
@@ -7410,6 +7526,25 @@ function maestroAplicar(plano) {
         if (a.soma != null) res.soma = a.soma;
         if (a.pontos != null) { res.pontos = a.pontos; res.pontosOficiais = a.pontos; res.habilitado = a.pontos >= 12; }
         atualizados++;
+      }
+
+      /* FICHA: grava a média de cada etapa, como o lançamento manual faz.
+         Reaproveita a nota daquele conjunto+etapa em vez de duplicar. */
+      if (plano.modelo === 'ficha' && Array.isArray(a.notas)) {
+        a.notas.forEach(n => {
+          const ex = S.notas.find(x => x.inscricaoId === ins.id && x.etapaId === n.etapaId);
+          if (ex) {
+            ex.etapaMedia = true; ex.valor = n.valor; ex.teto = n.teto;
+            ex.selo = 'provisorio'; ex.fonte = plano.nomeArquivo;
+            delete ex.bruta; delete ex.peso;
+          } else {
+            S.notas.push({ id: uid('nota'), inscricaoId: ins.id, etapaId: n.etapaId,
+              sessaoId: null, etapaMedia: true, valor: n.valor, teto: n.teto,
+              individual: false, fonte: plano.nomeArquivo, selo: 'provisorio' });
+          }
+        });
+        Motor.auditar('Importação de médias (ficha)', ins.id,
+          '', a.notas.length + ' etapa(s)', 'Ficha do animal', plano.nomeArquivo);
       }
     });
   }
@@ -7527,7 +7662,11 @@ function maestroAnalisar() {
         </div>` : ''}
         <div class="ms-previa">
           <b>Prévia (${Math.min(p.aceitos.length, 5)} de ${p.aceitos.length})</b>
-          ${p.aceitos.slice(0, 5).map(a => `<div class="ms-linha">
+          ${p.aceitos.slice(0, 5).map(a => a.notas ? `<div class="ms-linha">
+            <span class="ms-cav">${esc(a.cavalo)}</span>
+            <span class="ms-meta">${esc(categoriaDe(a.cat).nome)}${a.ginete ? ' · ' + esc(a.ginete) : ''} · ${a.quantidade}/${a.esperado} etapas</span>
+            <span class="ms-val">${num(a.media, 3)}</span>
+          </div>` : `<div class="ms-linha">
             <span class="ms-cav">${esc(a.cavalo)}</span>
             <span class="ms-meta">${esc(categoriaDe(a.cat).nome)}${a.ginete ? ' · ' + esc(a.ginete) : ''}</span>
             <span class="ms-val">${a.media != null ? num(a.media, 3) : (a.quantidade ? num(Math.round(a.soma / a.quantidade * 1000) / 1000, 3) : (a.posicao != null ? a.posicao + 'º' : '—'))}</span>
@@ -7591,6 +7730,299 @@ function eventoChaveDe(idApp) {
   if (e.ciclo === '2024') return 'final-2024';
   if (e.tipo === 'ranking') return 'ranking-' + e.ciclo;
   return e.id;
+}
+
+/* =====================================================================
+   FICHA DO ANIMAL — entrada de UM conjunto pela tela "Notas do Animal"
+
+   O caminho mais comum de quem está na prova não é planilha: é a ficha do
+   aplicativo oficial, com o ginete, o cavalo, a filiação e a média de cada
+   etapa. Aqui essa ficha entra inteira e, depois da conferência, cria o que
+   faltar: cavalo, ginete, inscrição na prova escolhida e as médias.
+
+   Nada é gravado na digitação. A tela mostra o que encontrou, o que vai
+   criar e o que já existe; a gravação é um segundo clique.
+   ===================================================================== */
+
+const FICHA_ETAPAS = ['andadura', 'figura', 'vsp-esb', 'mangueira1', 'campo1',
+  'mangueira2', 'bayard', 'campo2'];
+
+let FICHA_MSG = '';
+
+function adFicha() {
+  const provas = S.eventos.filter(e => e.tipo === 'credenciadora')
+    .sort((a, b) => String(b.dataInicio).localeCompare(String(a.dataInicio)));
+
+  setTimeout(() => ligarFicha(), 0);
+
+  const msg = FICHA_MSG;
+  FICHA_MSG = '';
+  return `
+  ${msg ? `<div class="aviso aviso-sucesso mb">${msg}</div>` : ''}
+  <div class="card">
+    <h3>Entrada de uma ficha</h3>
+    <p class="mini fraco" style="margin-top:-6px">O conjunto vem da tela “Notas do Animal”. Eu procuro o cavalo e o ginete no cadastro, mostro o que falta e só gravo depois que você conferir.</p>
+
+    <div class="grid g2 mt">
+      <div class="campo"><label>Prova de destino</label>
+        <select id="fcEvento" onchange="fichaTrocaProva()">
+          ${provas.length ? provas.map(e => `<option value="${e.id}">${esc(e.nome)} — ciclo ${esc(e.ciclo)}</option>`).join('') : ''}
+          <option value="__nova">➕ Cadastrar uma prova nova…</option>
+        </select></div>
+      <div class="campo"><label>Categoria</label>
+        <select id="fcCat">${CATEGORIAS.map(c => `<option value="${c.id}">${esc(c.nome)} (grupo ${c.grupo})</option>`).join('')}</select></div>
+    </div>
+
+    <div id="fcNovaProva" style="display:none">
+      <div class="aviso aviso-info mini">A prova é criada junto com a ficha, com a data de hoje. Depois você pode ajustar em Provas.</div>
+      <div class="grid g3 mt-sm">
+        <div class="campo"><label>Nome da prova</label><input id="fcPrNome" placeholder="ex.: Bagé - 1"></div>
+        <div class="campo"><label>Cidade</label><input id="fcPrCid" placeholder="ex.: Bagé"></div>
+        <div class="campo"><label>UF</label><input id="fcPrUf" maxlength="2" placeholder="RS"></div>
+      </div>
+      <div class="grid g2 mt-sm">
+        <div class="campo"><label>Data</label><input id="fcPrData" type="date"></div>
+        <div class="campo"><label>Ciclo</label>
+          <select id="fcPrCiclo">${S.ciclos.map(c => `<option value="${c.id}" ${c.id === (S.cicloAtivo || '2027') ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
+      </div>
+    </div>
+
+    <div class="grid g2 mt-sm">
+      <div class="campo"><label>Nome do cavalo</label>
+        <input id="fcCavalo" placeholder="como está na ficha" autocomplete="off"></div>
+      <div class="campo"><label>Nome do ginete</label>
+        <input id="fcGinete" placeholder="como está na ficha" autocomplete="off"></div>
+    </div>
+
+    <div class="grid g3 mt-sm">
+      <div class="campo"><label>Box</label><input id="fcBox" inputmode="numeric" placeholder="opcional"></div>
+      <div class="campo"><label>Registro do animal</label><input id="fcReg" placeholder="opcional"></div>
+      <div class="campo"><label>Geração</label><input id="fcGer" placeholder="opcional"></div>
+    </div>
+
+    <div class="grid g2 mt-sm">
+      <div class="campo"><label>Nome da mãe</label><input id="fcMae" placeholder="opcional"></div>
+      <div class="campo"><label>Nome do pai</label><input id="fcPai" placeholder="opcional"></div>
+    </div>
+
+    <div class="linha entre mt"><b>Média de cada etapa</b>
+      <span class="mini fraco" id="fcTeto">teto 15 nas cinco primeiras</span></div>
+    <div id="fcEtapas" class="fc-etapas mt-sm"></div>
+
+    <div class="linha mt">
+      <button class="btn verde" onclick="fichaConferir()">Conferir</button>
+      <button class="btn sec" onclick="fichaLimpar()">Limpar</button>
+    </div>
+    <div id="fcResultado" class="mt"></div>
+  </div>`;
+}
+
+/* desenha os campos de média das etapas do GRUPO da categoria escolhida */
+function fichaEtapas() {
+  const cat = ($('#fcCat') || {}).value || 'amador-a';
+  const grupo = (CATEGORIAS.find(c => c.id === cat) || {}).grupo || 'A';
+  const etapas = grupo === 'B' ? ETAPAS_B : ETAPAS_A;
+  const alvo = $('#fcEtapas');
+  if (!alvo) return;
+  alvo.innerHTML = etapas.map(e => `
+    <div class="fc-etapa">
+      <label>${esc(e.nome)}</label>
+      <input class="fc-nota" data-etapa="${e.id}" data-teto="${e.maxNota}"
+             inputmode="decimal" placeholder="0 a ${String(e.maxNota).replace('.', ',')}">
+      <span class="mini fraco">até ${String(e.maxNota).replace('.', ',')}</span>
+    </div>`).join('');
+  const teto = $('#fcTeto');
+  if (teto) teto.textContent = `${etapas.length} etapas do grupo ${grupo} · média final = soma ÷ ${grupo === 'B' ? 6 : 8}`;
+}
+
+function ligarFicha() {
+  fichaEtapas();
+  const sel = $('#fcCat');
+  if (sel) sel.onchange = () => { fichaEtapas(); const r = $('#fcResultado'); if (r) r.innerHTML = ''; };
+  /* Enter no último campo confere em vez de recarregar */
+  const caixa = document.querySelector('[data-ficha]');
+  if (caixa) caixa.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); fichaConferir(); } });
+}
+
+/* mostra os campos da prova nova só quando ela é escolhida */
+function fichaTrocaProva() {
+  const nova = ($('#fcEvento') || {}).value === '__nova';
+  const box = $('#fcNovaProva');
+  if (box) box.style.display = nova ? '' : 'none';
+  if (nova) {
+    const d = $('#fcPrData');
+    if (d && !d.value) d.value = hojeISO();
+  }
+  const r = $('#fcResultado'); if (r) r.innerHTML = '';
+}
+
+function fichaLimpar() {
+  ['fcCavalo', 'fcGinete', 'fcBox', 'fcReg', 'fcGer', 'fcMae', 'fcPai'].forEach(id => {
+    const el = $('#' + id); if (el) el.value = '';
+  });
+  $$('.fc-nota').forEach(i => { i.value = ''; });
+  const r = $('#fcResultado'); if (r) r.innerHTML = '';
+}
+
+/* ---------- conferência: monta o plano sem gravar ---------- */
+
+function fichaConferir() {
+  const alvo = $('#fcResultado');
+  const evId = ($('#fcEvento') || {}).value;
+  const evNova = evId === '__nova';
+  const ev = evNova ? null : eventoDe(evId);
+  if (!evNova && !ev) { alvo.innerHTML = `<div class="aviso aviso-erro">Escolha a prova de destino.</div>`; return; }
+
+  /* prova nova: exige nome, cidade, UF e data antes de seguir */
+  let dadosProva = null;
+  if (evNova) {
+    const nome = (($('#fcPrNome') || {}).value || '').trim();
+    const cidade = (($('#fcPrCid') || {}).value || '').trim();
+    const uf = (($('#fcPrUf') || {}).value || '').trim().toUpperCase();
+    const data = ($('#fcPrData') || {}).value;
+    const ciclo = ($('#fcPrCiclo') || {}).value;
+    const falta = [];
+    if (!nome) falta.push('nome da prova');
+    if (!cidade) falta.push('cidade');
+    if (uf.length !== 2) falta.push('UF com 2 letras');
+    if (!data) falta.push('data');
+    if (falta.length) {
+      alvo.innerHTML = `<div class="aviso aviso-erro">Para criar a prova, informe: ${falta.join(', ')}.</div>`;
+      return;
+    }
+    dadosProva = { nome, cidade, uf, data, ciclo };
+  }
+
+  const cat = ($('#fcCat') || {}).value;
+  const cavaloNome = (($('#fcCavalo') || {}).value || '').trim();
+  const gineteNome = (($('#fcGinete') || {}).value || '').trim();
+  if (!cavaloNome) { alvo.innerHTML = `<div class="aviso aviso-erro">Informe o nome do cavalo.</div>`; return; }
+  if (!gineteNome) { alvo.innerHTML = `<div class="aviso aviso-erro">Informe o nome do ginete.</div>`; return; }
+
+  /* lê as médias conferindo o teto de cada etapa */
+  const cicloLido = ev ? ev.ciclo : dadosProva.ciclo;
+  const listaEtapas = etapasDe(cicloLido, cat);
+  const notas = [], erros = [];
+  $$('.fc-nota').forEach(inp => {
+    const et = inp.dataset.etapa;
+    const lido = lerNotaDigitada(inp.value, Number(inp.dataset.teto));
+    if (lido.vazio) return;
+    if (lido.erro) { erros.push(lido.erro); inp.classList.add('fc-erro'); return; }
+    inp.classList.remove('fc-erro');
+    const etapa = listaEtapas.find(x => x.id === et) || {};
+    notas.push({ etapaId: et, valor: lido.valor, teto: etapa.maxNota || Number(inp.dataset.teto), nome: etapa.nome || et });
+  });
+
+  if (erros.length) {
+    alvo.innerHTML = `<div class="aviso aviso-erro"><b>Média fora da faixa:</b><br>${erros.map(esc).join('<br>')}</div>`;
+    return;
+  }
+  if (!notas.length) { alvo.innerHTML = `<div class="aviso aviso-atencao">Nenhuma média preenchida.</div>`; return; }
+
+  const grupo = (CATEGORIAS.find(c => c.id === cat) || {}).grupo || 'A';
+  const divisor = grupo === 'B' ? 6 : 8;
+  const soma = notas.reduce((a, n) => a + n.valor, 0);
+  const media = Math.round(soma / divisor * 1000) / 1000;
+
+  /* quem já existe */
+  const cavExistente = S.cavalos.find(c => norm(c.nome) === norm(cavaloNome));
+  const ginExistente = S.ginetes.find(g => norm(g.nome) === norm(gineteNome)
+    || (g.grafias || []).some(x => norm(x) === norm(gineteNome)));
+  const insExistente = (cavExistente && ev)
+    ? S.inscricoes.find(i => i.eventoId === ev.id && i.categoriaId === cat && i.cavaloId === cavExistente.id)
+    : null;
+
+  const linha = (rot, val, tipo) => `<div class="fc-check ${tipo || ''}">
+    <span class="fc-rot">${rot}</span><span class="fc-val">${val}</span></div>`;
+
+  alvo.innerHTML = `
+    <div class="card-in fc-card">
+      <div class="fc-topo"><b>${esc(cavaloNome)}</b>
+        <span class="mini fraco">${esc(categoriaDe(cat).nome)} · ${esc(ev ? ev.nome : dadosProva.nome + ' (prova nova)')}</span></div>
+
+      <div class="fc-bloco">
+        ${linha('Ginete', ginExistente
+          ? `<span class="selo selo-verde">já cadastrado</span> ${esc(ginExistente.nome)}`
+          : `<span class="selo selo-ouro">vai ser criado</span> ${esc(gineteNome)}`)}
+        ${linha('Cavalo', cavExistente
+          ? `<span class="selo selo-verde">já cadastrado</span> ${esc(cavExistente.nome)}`
+          : `<span class="selo selo-ouro">vai ser criado</span> ${esc(cavaloNome)}`)}
+        ${linha('Inscrição nesta prova', insExistente
+          ? `<span class="selo selo-verde">já existe</span> as médias serão atualizadas`
+          : `<span class="selo selo-ouro">vai ser criada</span>`)}
+      </div>
+
+      <div class="fc-bloco">
+        <div class="fc-sub">Médias desta ficha</div>
+        ${notas.map(n => `<div class="fc-nota-l"><span>${esc(n.nome)}</span>
+          <b>${num(n.valor, 3)}</b><span class="mini fraco">de ${String(n.teto).replace('.', ',')}</span></div>`).join('')}
+        <div class="fc-total">
+          <span>Soma ${num(soma, 3)} ÷ ${divisor}</span>
+          <b>${num(media, 3)}</b>
+        </div>
+        ${notas.length < divisor ? `<div class="aviso aviso-atencao mini">${notas.length} de ${divisor} etapas preenchidas. A média divide por ${divisor} — se faltar etapa, ela fica menor que a real.</div>` : ''}
+      </div>
+
+      <div class="linha mt">
+        <button class="btn verde" onclick="fichaGravar()">Gravar na prova</button>
+        <button class="btn sec" onclick="$('#fcResultado').innerHTML=''">Cancelar</button>
+      </div>
+      <p class="mini fraco mt-sm">Grava como provisório. A classificação é recalculada depois da gravação, e a média oficial nunca é sobrescrita.</p>
+    </div>`;
+
+  /* guarda o plano para o segundo clique */
+  window.__fichaPlano = {
+    modelo: 'ficha', nomeArquivo: 'Ficha — ' + cavaloNome,
+    eventoId: ev ? ev.id : null, provaNova: dadosProva,
+    aceitos: [{
+      cat, cavalo: cavaloNome, ginete: gineteNome,
+      registro: (($('#fcReg') || {}).value || '').trim(),
+      box: numeroBR((($('#fcBox') || {}).value || '').trim()),
+      mae: (($('#fcMae') || {}).value || '').trim(),
+      pai: (($('#fcPai') || {}).value || '').trim(),
+      notas, quantidade: notas.length, soma, divisor, esperado: divisor,
+      media, problema: null
+    }],
+    rejeitados: [], avisos: [], total: 1
+  };
+}
+
+function fichaGravar() {
+  const plano = window.__fichaPlano;
+  if (!plano) { toast('Confira a ficha antes de gravar.', 'erro'); return; }
+
+  /* prova nova: cria o evento antes de amarrar a inscrição nele */
+  if (plano.provaNova) {
+    const p = plano.provaNova;
+    const novo = {
+      id: uid('ev'), nome: p.nome, cidade: p.cidade, uf: p.uf,
+      dataInicio: p.data, ciclo: p.ciclo, tipo: 'credenciadora',
+      status: 'rascunho', documento: 'Ficha do animal',
+      criadoEm: new Date().toISOString().slice(0, 16).replace('T', ' ')
+    };
+    S.eventos.push(novo);
+    plano.eventoId = novo.id;
+    Motor.auditar('Nova prova', novo.nome, '', novo.nome + ' · ' + novo.cidade + '/' + novo.uf,
+      'Criada junto com a entrada de ficha', 'Ficha do animal');
+  }
+
+  const r = maestroAplicar(plano);
+  if (!r.ok) { toast(r.msg || 'Não foi possível gravar.', 'erro'); return; }
+  /* recalcula a classificação da prova com as médias novas */
+  recalcularProva(plano.eventoId);
+  salvar();
+  window.__fichaPlano = null;
+  const cav = S.cavalos.find(c => norm(c.nome) === norm(plano.aceitos[0].cavalo));
+  const ins = cav ? S.inscricoes.find(i => i.eventoId === plano.eventoId
+    && i.categoriaId === plano.aceitos[0].cat && i.cavaloId === cav.id) : null;
+  const med = ins ? Motor.mediaProva(ins.id) : null;
+  FICHA_MSG = `<b>Ficha gravada.</b> ${esc(plano.aceitos[0].cavalo)} · ${esc(categoriaDe(plano.aceitos[0].cat).nome)}`
+    + (med != null ? ` · média <b>${num(med, 3)}</b>` : '')
+    + `. ${r.criados} criado(s), ${r.atualizados} atualizado(s).`
+    + (plano.provaNova ? ` A prova <b>${esc(plano.provaNova.nome)}</b> foi criada como rascunho.` : '')
+    + ` <a href="#/admin/sumulas">Conferir as médias</a>.`;
+  toast('Ficha gravada.');
+  render();
 }
 
 /* =============== 2. BANNERS — publicidade rotativa =============== */
