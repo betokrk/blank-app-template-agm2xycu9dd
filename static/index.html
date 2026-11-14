@@ -2470,6 +2470,16 @@ table.tab-comp-final td .mini{margin-top:1px}
 .fc-total span{font-size:13px;color:var(--texto-fraco)}
 .fc-total b{font-family:Georgia,serif;font-size:21px;font-variant-numeric:tabular-nums}
 
+.fc-upload{display:flex;flex-direction:column;gap:6px;align-items:flex-start;
+  margin-top:12px;padding:16px;border:1.5px dashed var(--linha);border-radius:13px;background:#fbf8f1}
+.fc-btn-up{font-size:15px}
+.fc-sec{margin-top:14px;padding:10px 12px;background:#fbf8f1;border:1px solid var(--linha-2);border-radius:11px}
+.fc-sec>summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--azul);list-style:none}
+.fc-sec>summary::-webkit-details-marker{display:none}
+.fc-sec>summary:before{content:'▸ ';color:var(--dourado)}
+.fc-sec[open]>summary:before{content:'▾ '}
+.fc-sec[open]>summary{margin-bottom:6px}
+
 `;
 
 function injetarCSS() {
@@ -2650,7 +2660,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 18:23 · 6e36220</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 18:59 · 629b21b</p>
       </div>
     </div>
   </div></footer>`;
@@ -7153,6 +7163,45 @@ function adRelatorios() {
 
 /* =============== 1. MAESTRO — leitura de planilhas e documentos =============== */
 
+/* Encontra o cadastro existente que corresponde ao nome lido, mesmo quando
+   a grafia veio diferente — o OCR erra acento, dobra letra e troca "I" por
+   "|". Sem isso, cada ficha criava um cavalo novo e uma inscrição nova.
+
+   Regra: nome exato (sem acento, sem caixa) resolve direto. Senão, aceita
+   quando TODOS os nomes do mais curto aparecem no mais longo e o primeiro
+   nome bate — é o caso de "SANTA JULIA IGUALITA" × "SANTA JÚLIA IGUALITA".
+   Nada além disso é aproximado: prefiro pedir conferência a fundir dois
+   animais diferentes. */
+function fichaTokens(s) {
+  return norm(s).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter(x => x.length > 1);
+}
+
+function fichaAcharParecido(nome, lista) {
+  const alvo = norm(nome);
+  if (!alvo) return { exato: null, parecido: null };
+  const exato = lista.find(x => norm(x.nome) === alvo);
+  if (exato) return { exato, parecido: null };
+
+  const tA = fichaTokens(nome);
+  if (!tA.length) return { exato: null, parecido: null };
+  let melhor = null, melhorNota = 0;
+
+  lista.forEach(x => {
+    const tB = fichaTokens(x.nome);
+    if (!tB.length) return;
+    /* o primeiro nome tem de ser o mesmo: "SANTA JULIA" ≠ "SANTA LARISSA" */
+    if (tA[0] !== tB[0]) return;
+    const menor = tA.length <= tB.length ? tA : tB;
+    const maior = tA.length <= tB.length ? tB : tA;
+    const contidos = menor.filter(t => maior.includes(t)).length;
+    if (contidos / menor.length < 0.8) return;
+    if (Math.abs(tA.length - tB.length) > 2) return;
+    const nota = contidos / maior.length;
+    if (nota > melhorNota) { melhorNota = nota; melhor = x; }
+  });
+  return { exato: null, parecido: melhor };
+}
+
 const MAESTRO_MODELOS = {
   notas: {
     nome: 'Notas e médias (uma linha por conjunto)',
@@ -7451,8 +7500,18 @@ function maestroAplicar(plano) {
   const ciclo = ev ? ev.ciclo : (S.cicloAtivo || '2026');
   const agora = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
-  const acharCavalo = (nome) => S.cavalos.find(c => norm(c.nome) === norm(nome));
-  const acharGinete = (nome) => S.ginetes.find(g => norm(g.nome) === norm(nome));
+  /* O cadastro existente tem PRIORIDADE sobre criar outro: nome exato e,
+     quando a grafia veio torta (OCR, digitação), o parecido com o mesmo
+     primeiro nome. Sem isso, cada ficha criava um animal novo e uma
+     inscrição nova para o mesmo conjunto. */
+  const acharCavalo = (nome) => {
+    const r = fichaAcharParecido(nome, S.cavalos);
+    return r.exato || r.parecido;
+  };
+  const acharGinete = (nome) => {
+    const r = fichaAcharParecido(nome, S.ginetes);
+    return r.exato || r.parecido;
+  };
 
   if (plano.modelo === 'cavalos') {
     plano.aceitos.forEach(a => {
@@ -7480,6 +7539,9 @@ function maestroAplicar(plano) {
         S.cavalos.push(cav);
       }
       /* a ficha do animal traz filiação: aproveita no cadastro */
+      if (a.cavalo && norm(cav.nome) !== norm(a.cavalo)) {
+        cav.grafias = Array.from(new Set([].concat(cav.grafias || [], [cav.nome, a.cavalo])));
+      }
       if (a.pai && !cav.paiNome) cav.paiNome = a.pai;
       if (a.mae && !cav.maeNome) cav.maeNome = a.mae;
       if (a.registro && !cav.registro) cav.registro = a.registro;
@@ -7487,6 +7549,10 @@ function maestroAplicar(plano) {
       if (!cav.ciclos.includes(ciclo)) cav.ciclos.push(ciclo);
 
       let gin = a.ginete ? acharGinete(a.ginete) : null;
+      if (gin && a.ginete && norm(gin.nome) !== norm(a.ginete)) {
+        /* grafia diferente que já foi resolvida: guarda para não reprocessar */
+        gin.grafias = Array.from(new Set([].concat(gin.grafias || [], [gin.nome, a.ginete])));
+      }
       if (a.ginete && !gin) {
         gin = { id: 'gin-' + String(S.ginetes.length + 1).padStart(4, '0'), nome: a.ginete,
                 grafias: [a.ginete], cavalosIds: [cav.id], cavaloPrincipalId: cav.id,
@@ -7761,7 +7827,18 @@ function adFicha() {
   ${msg ? `<div class="aviso aviso-sucesso mb">${msg}</div>` : ''}
   <div class="card">
     <h3>Entrada de uma ficha</h3>
-    <p class="mini fraco" style="margin-top:-6px">O conjunto vem da tela “Notas do Animal”. Eu procuro o cavalo e o ginete no cadastro, mostro o que falta e só gravo depois que você conferir.</p>
+    <p class="mini fraco" style="margin-top:-6px">Mande a foto ou o print da ficha “Notas do Animal”. Eu leio, preencho os campos e você só confere.</p>
+
+    <div class="fc-upload" id="fcUploadArea">
+      <input id="fcArquivo" type="file" accept="image/*,.pdf,.txt" style="display:none" onchange="fichaUpload()">
+      <button class="btn verde fc-btn-up" onclick="document.getElementById('fcArquivo').click()">
+        📷 Enviar a ficha (foto ou print)</button>
+      <span class="mini fraco">PNG, JPG, PDF ou texto. A leitura acontece aqui no aparelho.</span>
+    </div>
+    <div id="fcLeitura" class="mt"></div>
+
+    <details class="fc-sec" ${provas.length ? '' : 'open'}>
+      <summary>Destino da ficha</summary>
 
     <div class="grid g2 mt">
       <div class="campo"><label>Prova de destino</label>
@@ -7786,7 +7863,10 @@ function adFicha() {
           <select id="fcPrCiclo">${S.ciclos.map(c => `<option value="${c.id}" ${c.id === (S.cicloAtivo || '2027') ? 'selected' : ''}>${esc(c.nome)}</option>`).join('')}</select></div>
       </div>
     </div>
+    </details>
 
+    <details class="fc-sec" ${provas.length ? '' : 'open'}>
+      <summary>Campos da ficha <span class="mini fraco">(confira e ajuste o que precisar)</span></summary>
     <div class="grid g2 mt-sm">
       <div class="campo"><label>Nome do cavalo</label>
         <input id="fcCavalo" placeholder="como está na ficha" autocomplete="off"></div>
@@ -7805,6 +7885,8 @@ function adFicha() {
       <div class="campo"><label>Nome do pai</label><input id="fcPai" placeholder="opcional"></div>
     </div>
 
+    </details>
+
     <div class="linha entre mt"><b>Média de cada etapa</b>
       <span class="mini fraco" id="fcTeto">teto 15 nas cinco primeiras</span></div>
     <div id="fcEtapas" class="fc-etapas mt-sm"></div>
@@ -7815,6 +7897,141 @@ function adFicha() {
     </div>
     <div id="fcResultado" class="mt"></div>
   </div>`;
+}
+
+/* =====================================================================
+   UPLOAD DA FICHA — foto/print entra, campos saem preenchidos
+
+   O OCR roda no próprio aparelho quando existe (Tesseract), e quando não
+   existe cai no servidor. Em nenhum dos dois casos o arquivo é guardado:
+   lê, preenche e pronto.
+   ===================================================================== */
+
+async function fichaUpload() {
+  const inp = $('#fcArquivo');
+  const alvo = $('#fcLeitura');
+  if (!inp || !inp.files || !inp.files[0]) return;
+  const f = inp.files[0];
+  if (f.size > 8 * 1024 * 1024) {
+    alvo.innerHTML = `<div class="aviso aviso-erro">Arquivo acima de 8 MB.</div>`;
+    return;
+  }
+
+  alvo.innerHTML = `<div class="vazio-mini"><b>Lendo ${esc(f.name)}…</b>
+    <span id="fcProg">preparando a leitura</span></div>`;
+  const prog = (t) => { const el = $('#fcProg'); if (el) el.textContent = t; };
+
+  const nome = (f.name || '').toLowerCase();
+  const ehImagem = /^image\//.test(f.type) || /\.(png|jpe?g|webp|bmp|gif|heic)$/.test(nome);
+  const ehPDF = /\.pdf$/.test(nome);
+  const ehTxt = /\.(txt|csv)$/.test(nome);
+
+  try {
+    let texto = '';
+
+    if (ehTxt) {
+      texto = await f.text();
+    } else if (ehImagem) {
+      texto = await fichaOCRImagem(f, prog);
+    } else if (ehPDF) {
+      prog('extraindo o texto do PDF…');
+      texto = await pdfExtrairTexto(f);
+      if (texto.trim().length < 40) {
+        alvo.innerHTML = `<div class="aviso aviso-atencao"><b>Este PDF é digitalizado (foto dentro do PDF).</b>
+          Não consigo ler texto nele. Tire um print da tela e envie a imagem.</div>`;
+        return;
+      }
+    } else {
+      alvo.innerHTML = `<div class="aviso aviso-erro">Formato não suportado. Envie imagem (PNG/JPG), PDF com texto ou .txt.</div>`;
+      return;
+    }
+
+    prog('interpretando os campos…');
+    const lido = fichaDoTexto(texto);
+    fichaPreencher(lido, texto);
+  } catch (e) {
+    alvo.innerHTML = `<div class="aviso aviso-erro"><b>Não consegui ler esta ficha.</b><br>${esc(e.message || e)}
+      <div class="mini mt-sm">Você pode preencher os campos à mão abaixo — a conferência é a mesma.</div></div>`;
+  }
+}
+
+/* OCR da imagem: tenta no aparelho; se não houver, avisa em vez de fingir */
+async function fichaOCRImagem(arquivo, prog) {
+  prog('carregando o leitor de imagem…');
+  try {
+    await carregarTesseract();
+  } catch (e) {
+    throw new Error('O leitor de imagem (OCR) precisa de internet e não carregou. Sem ele, preencha os campos à mão.');
+  }
+  const url = URL.createObjectURL(arquivo);
+  try {
+    const r = await window.Tesseract.recognize(url, 'por', {
+      logger: (m) => { if (m.status === 'recognizing text') prog('lendo a imagem… ' + Math.round(m.progress * 100) + '%'); }
+    });
+    return r.data.text || '';
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* joga os campos lidos nos inputs, avisando o que ficou de fora */
+function fichaPreencher(lido, texto) {
+  const alvo = $('#fcLeitura');
+  const falta = fichaPendencias(lido);
+
+  if (lido.cavalo) $('#fcCavalo').value = lido.cavalo;
+  if (lido.ginete) $('#fcGinete').value = lido.ginete;
+  if (lido.box != null) $('#fcBox').value = lido.box;
+  if (lido.geracao) $('#fcGer').value = lido.geracao;
+  if (lido.mae) $('#fcMae').value = lido.mae;
+  if (lido.pai) $('#fcPai').value = lido.pai;
+
+  /* as médias entram nos campos das etapas do grupo escolhido */
+  const lidas = {};
+  lido.notas.forEach(n => { lidas[n.etapaId] = n.valor; });
+  $$('.fc-nota').forEach(inp => {
+    const v = lidas[inp.dataset.etapa];
+    inp.value = v == null ? '' : String(v).replace('.', ',');
+  });
+
+  /* etapa que veio na ficha mas não existe no grupo escolhido */
+  const idsNaTela = new Set(Array.from(document.querySelectorAll('.fc-nota')).map(i => i.dataset.etapa));
+  const ignoradas = lido.notas.filter(n => !idsNaTela.has(n.etapaId));
+
+  const numEtapas = lido.notas.length;
+  alvo.innerHTML = `
+    <div class="aviso ${falta.length ? 'aviso-atencao' : 'aviso-sucesso'}">
+      <b>${numEtapas} média(s) lida(s)</b>${lido.cavalo ? ' · ' + esc(lido.cavalo) : ''}${lido.ginete ? ' · ' + esc(lido.ginete) : ''}.
+      ${falta.length ? `<br><b>Confira à mão:</b> ${falta.join(', ')}.` : ''}
+      ${ignoradas.length ? `<br>Não entraram: ${ignoradas.map(n => esc(n.etapaId)).join(', ')} — não existe nesta categoria.` : ''}
+    </div>
+    ${lido.naoReconhecido.length ? `<details class="fc-sec mt-sm"><summary>Linhas que não entendi (${lido.naoReconhecido.length})</summary>
+      <div class="mini" style="white-space:pre-wrap;margin-top:8px">${esc(lido.naoReconhecido.slice(0, 12).join('\n'))}</div></details>` : ''}
+    <details class="fc-sec mt-sm"><summary>Texto lido da imagem</summary>
+      <pre class="ia-pre" style="margin-top:8px">${esc(String(texto || '').slice(0, 1500))}</pre></details>
+    <div class="linha mt-sm"><button class="btn sec sm" onclick="fichaConferir()">Conferir e gravar</button></div>`;
+}
+
+/* o que já existe para esta ficha — cavalo, ginete e inscrição */
+function fichaSituacao(cavaloNome, gineteNome, eventoId, cat) {
+  const cav = fichaAcharParecido(cavaloNome, S.cavalos);
+  const gin = fichaAcharParecido(gineteNome, S.ginetes.map(g => ({ ...g, nome: g.nome })));
+
+  const cavaloId = (cav.exato || cav.parecido || {}).id || null;
+  const gineteId = (gin.exato || gin.parecido || {}).id || null;
+
+  const ins = (cavaloId && eventoId)
+    ? S.inscricoes.find(i => i.eventoId === eventoId && i.categoriaId === cat && i.cavaloId === cavaloId)
+    : null;
+
+  /* o ginete pode montar mais de um animal no mesmo ciclo — mas se ele já
+     está nesta prova/categoria com OUTRO cavalo, isso é para você saber. */
+  const outrosDoGinete = (gineteId && eventoId)
+    ? S.inscricoes.filter(i => i.eventoId === eventoId && i.categoriaId === cat
+        && i.gineteId === gineteId && i.cavaloId !== cavaloId)
+    : [];
+
+  return { cavalo: cav, ginete: gin, cavaloId, gineteId, inscricao: ins, outrosDoGinete };
 }
 
 /* desenha os campos de média das etapas do GRUPO da categoria escolhida */
@@ -7924,13 +8141,13 @@ function fichaConferir() {
   const soma = notas.reduce((a, n) => a + n.valor, 0);
   const media = Math.round(soma / divisor * 1000) / 1000;
 
-  /* quem já existe */
-  const cavExistente = S.cavalos.find(c => norm(c.nome) === norm(cavaloNome));
-  const ginExistente = S.ginetes.find(g => norm(g.nome) === norm(gineteNome)
-    || (g.grafias || []).some(x => norm(x) === norm(gineteNome)));
-  const insExistente = (cavExistente && ev)
-    ? S.inscricoes.find(i => i.eventoId === ev.id && i.categoriaId === cat && i.cavaloId === cavExistente.id)
-    : null;
+  /* quem já existe — com tolerância à grafia do OCR */
+  const sit = fichaSituacao(cavaloNome, gineteNome, ev ? ev.id : null, cat);
+  const cavExistente = sit.cavalo.exato || sit.cavalo.parecido;
+  const ginExistente = sit.ginete.exato || sit.ginete.parecido;
+  const insExistente = sit.inscricao;
+  const cavParecido = !!sit.cavalo.parecido;
+  const ginParecido = !!sit.ginete.parecido;
 
   const linha = (rot, val, tipo) => `<div class="fc-check ${tipo || ''}">
     <span class="fc-rot">${rot}</span><span class="fc-val">${val}</span></div>`;
@@ -7943,13 +8160,17 @@ function fichaConferir() {
       <div class="fc-bloco">
         ${linha('Ginete', ginExistente
           ? `<span class="selo selo-verde">já cadastrado</span> ${esc(ginExistente.nome)}`
+            + (ginParecido ? `<span class="mini fraco">(grafia da ficha: ${esc(gineteNome)})</span>` : '')
           : `<span class="selo selo-ouro">vai ser criado</span> ${esc(gineteNome)}`)}
         ${linha('Cavalo', cavExistente
           ? `<span class="selo selo-verde">já cadastrado</span> ${esc(cavExistente.nome)}`
+            + (cavParecido ? `<span class="mini fraco">(grafia da ficha: ${esc(cavaloNome)})</span>` : '')
           : `<span class="selo selo-ouro">vai ser criado</span> ${esc(cavaloNome)}`)}
         ${linha('Inscrição nesta prova', insExistente
-          ? `<span class="selo selo-verde">já existe</span> as médias serão atualizadas`
+          ? `<span class="selo selo-verde">já inscrito</span> não cria outra — só atualiza as médias`
           : `<span class="selo selo-ouro">vai ser criada</span>`)}
+        ${sit.outrosDoGinete.length ? linha('Atenção',
+          `<span class="selo selo-ouro">mesmo ginete</span> já monta ${esc(sit.outrosDoGinete.map(i => nomeCavalo(i.cavaloId)).join(', '))} nesta categoria`) : ''}
       </div>
 
       <div class="fc-bloco">
@@ -8898,6 +9119,180 @@ function bannerApagarConfirmar(id, dbId) {
   }
   S.banners = S.banners.filter(x => x.id !== id);
   salvar(); fecharModal(); toast('Banner apagado.'); render();
+}
+
+
+/* =====================================================================
+   LEITOR DE FICHA "NOTAS DO ANIMAL" (texto do OCR → campos)
+
+   Recebe o texto que o OCR extraiu de uma foto da ficha e devolve os
+   campos: cavalo, ginete, box, geração, mãe, pai e a média de cada etapa.
+
+   O texto reconhecido NUNCA é confiável ao pé da letra: chega sem acento,
+   com "|" no lugar de "I", com espaço a mais, e às vezes com um caractere
+   trocado. Por isso o leitor trabalha por RÓTULO e pelo número no fim da
+   linha, nunca pela posição fixa das coisas.
+
+   Regra de ouro: o que não for reconhecido com segurança fica VAZIO e é
+   apontado na tela. Nada é inventado para "completar" a ficha.
+   ===================================================================== */
+
+/* rótulos das etapas como aparecem na ficha — a ordem importa:
+   Campo 2 antes de Campo 1, e Mangueira II antes de Mangueira I. */
+const FICHA_ROTULOS = [
+  { id: 'andadura', re: /andadura/ },
+  { id: 'figura', re: /figura/ },
+  { id: 'vsp-esb', re: /vsp|esb|esbarrada/ },
+  { id: 'campo2', re: /campo\s*(2|ii|dois)/ },
+  { id: 'campo1', re: /campo\s*(1|i|um)/ },
+  { id: 'mangueira2', re: /mangueira\s*(2|ii|dois)/ },
+  { id: 'mangueira1', re: /mangueira\s*(1|i|um)/ },
+  { id: 'bayard', re: /bayard|sarmento/ }
+];
+
+/* rótulo normalizado: sem acento, e os "|" que o OCR põe no lugar de "I"
+   viram "i" — é o que faz "Mangueira ||" voltar a ser Mangueira II. */
+function fichaRotulo(s) {
+  return norm(String(s || '').replace(/[|!]/g, 'i'))
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* nome vindo do OCR: tira os "|" soltos e o lixo de borda */
+function fichaNome(s) {
+  return String(s || '')
+    .replace(/[|]{1,}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[:\s\-–—]+|[:\s\-–—]+$/g, '')
+    .trim();
+}
+
+/* o número no FIM da linha — "Andaduras 8,100", "Mangueira I: 1,500" */
+function fichaValorDaLinha(linha) {
+  const m = String(linha).match(/(\d{1,2}[.,]\d{1,3})\s*$/);
+  if (!m) return null;
+  const bruto = m[1];
+  /* vírgula decimal: a ficha mostra três casas, 8,100 = 8,1 */
+  if (bruto.includes(',') && bruto.includes('.')) return numeroBR(bruto);
+  if (bruto.includes(',')) return Number(bruto.replace(',', '.'));
+  return Number(bruto);
+}
+
+/* linhas de moldura do aplicativo (hora, barra de status, abas) */
+function fichaEhMoldura(linha) {
+  const t = fichaRotulo(linha);
+  if (!t) return true;
+  /* hora e operadora: "18:11 TUBE", "18:11", "9:41 5G" */
+  if (/^\d{1,2}\s*\d{2}\b/.test(t) && t.split(' ').length <= 3) return true;
+  if (/notas do animal/.test(t)) return true;
+  /* abas: qualquer combinação só dessas palavras */
+  const tokens = t.split(' ').filter(Boolean);
+  const abas = new Set(['detalhes', 'midia', 'historico', 'media', 'categoria', 'voltar', 'compartilhar']);
+  if (tokens.length && tokens.every(x => abas.has(x))) return true;
+  return false;
+}
+
+function fichaDoTexto(texto) {
+  const linhas = String(texto || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map(l => l.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+
+  const r = { cavalo: '', ginete: '', mae: '', pai: '', box: null, geracao: '',
+              notas: [], naoReconhecido: [], bruto: String(texto || '') };
+
+  const mangueiras = [];   /* "Mangueira" sem número, resolvida pela ordem */
+  let candidatoCavalo = '';
+
+  const guardaGeracao = (s) => {
+    const g = String(s).match(/(\d{1,2})\s*[ªa°º]?\s*gera[cç][aã]o/i);
+    if (g) r.geracao = g[1] + 'ª';
+  };
+
+  linhas.forEach(linha => {
+    const t = fichaRotulo(linha);
+    let m;
+
+    /* ---------- 1. cabeçalho, por rótulo ----------
+       Aceita "Nome da Mãe LUMINOSA", "Mãe: LUMINOSA" e "MAE: LUMINOSA".
+       Sem o prefixo "Nome d..." o dois-pontos é OBRIGATÓRIO: assim um cavalo
+       chamado "MAE VEIO" não é confundido com o campo da mãe. */
+    if ((m = linha.match(/^\s*nome\s+da\s+m[aã]e\s*[:\-–—]?\s*(.+)$/i))
+     || (m = linha.match(/^\s*m[aã]e\s*[:\-–—]\s*(.+)$/i))) {
+      r.mae = fichaNome(m[1]); return;
+    }
+    if ((m = linha.match(/^\s*nome\s+do\s+pai\s*[:\-–—]?\s*(.+)$/i))
+     || (m = linha.match(/^\s*pai\s*[:\-–—]\s*(.+)$/i))) {
+      r.pai = fichaNome(m[1]); return;
+    }
+    if ((m = linha.match(/^\s*nome\s+do\s+ginete\s*[:\-–—]?\s*(.+)$/i))
+     || (m = linha.match(/^\s*ginete\s*[:\-–—]\s*(.+)$/i))) {
+      r.ginete = fichaNome(m[1]); return;
+    }
+    /* box: guarda o número E a geração, que costumam vir na mesma linha */
+    if ((m = linha.match(/\bbox\s*[:\-–—]?\s*(\d{1,4})/i))) {
+      r.box = Number(m[1]);
+      guardaGeracao(linha);
+      return;
+    }
+    guardaGeracao(linha);
+
+    /* ---------- 2. linha de média: rótulo da etapa + número no fim ---------- */
+    const valor = fichaValorDaLinha(linha);
+    if (valor != null) {
+      const rotulo = fichaRotulo(linha.replace(/[\d.,]+\s*$/, '').replace(/[:\-–—]+\s*$/, ''));
+      const achado = FICHA_ROTULOS.find(x => x.re.test(rotulo));
+      if (achado) { r.notas.push({ etapaId: achado.id, valor, origem: linha }); return; }
+      if (/mangueira/.test(rotulo)) { mangueiras.push({ valor, origem: linha }); return; }
+      r.naoReconhecido.push(linha);
+      return;
+    }
+
+    /* ---------- 3. o resto: candidato a nome do cavalo ---------- */
+    if (fichaEhMoldura(linha)) return;
+    if (!candidatoCavalo) { candidatoCavalo = fichaNome(linha); return; }
+    r.naoReconhecido.push(linha);
+  });
+
+  /* mangueira sem numeração: a primeira é I, a segunda é II */
+  mangueiras.forEach((mg, i) => {
+    const id = i === 0 ? 'mangueira1' : 'mangueira2';
+    if (!r.notas.some(n => n.etapaId === id)) r.notas.push({ etapaId: id, valor: mg.valor, origem: mg.origem });
+  });
+
+  /* etapa repetida: o OCR às vezes lê a mesma linha duas vezes */
+  const vistos = new Set();
+  r.notas = r.notas.filter(n => {
+    if (vistos.has(n.etapaId)) return false;
+    vistos.add(n.etapaId); return true;
+  });
+
+  /* nome do cavalo: a linha em MAIÚSCULAS com mais de uma palavra, que não
+     seja rótulo conhecido. É a assinatura visual do título da ficha. */
+  r.cavalo = fichaNome(candidatoCavalo).replace(/\s*[:\-–—]\s*$/, '');
+  if (!r.cavalo) {
+    const alt = linhas.find(l => {
+      const t = fichaRotulo(l);
+      if (fichaEhMoldura(l)) return false;
+      if (/^(box|nome|ginete|m[aã]e|pai|categoria)\b/.test(t)) return false;
+      if (FICHA_ROTULOS.some(x => x.re.test(t))) return false;
+      return /[A-ZÀ-Ú]{3}/.test(l) && l.split(' ').length >= 2;
+    });
+    if (alt) r.cavalo = fichaNome(alt);
+  }
+
+  return r;
+}
+
+/* o que ficou faltando, para avisar antes de gravar */
+function fichaPendencias(f) {
+  const falta = [];
+  if (!f.cavalo) falta.push('nome do cavalo');
+  if (!f.ginete) falta.push('nome do ginete');
+  if (!f.notas.length) falta.push('nenhuma média');
+  return falta;
 }
 
 
