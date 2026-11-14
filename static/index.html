@@ -1166,6 +1166,36 @@ function migrarNotasAntigas() {
 
 /* Grava SEMPRE no cofre de dados (sem versão): uma versão nova do site não
    pode apagar cadastro. A base oficial é regravada à parte, na CHAVE. */
+/* Rede de segurança do cadastro: o cavalo pode chegar do banco sem algum
+   campo (importação antiga, ficha, JSON de outra versão). Em vez de deixar
+   a tela morrer num `c.nascimento.slice()`, todo cadastro é completado com
+   o campo vazio na abertura. Roda junto com a migração de notas. */
+const CAMPOS_CAVALO_TEXTO = ['registro', 'rg', 'sexo', 'pelagem', 'nascimento',
+  'criador', 'afixo', 'proprietario', 'expositor', 'domador', 'estabelecimento',
+  'paiNome', 'maeNome'];
+
+function normalizarCadastros() {
+  let mexidos = 0;
+  (S.cavalos || []).forEach(c => {
+    if (!c) return;
+    CAMPOS_CAVALO_TEXTO.forEach(k => {
+      if (typeof c[k] !== 'string') { c[k] = c[k] == null ? '' : String(c[k]); mexidos++; }
+    });
+    ['paiId', 'maeId'].forEach(k => { if (c[k] === undefined) { c[k] = null; mexidos++; } });
+    if (!Array.isArray(c.categorias)) { c.categorias = []; mexidos++; }
+    if (!Array.isArray(c.ciclos)) { c.ciclos = []; mexidos++; }
+  });
+  (S.ginetes || []).forEach(g => {
+    if (!g) return;
+    ['nome', 'cidade', 'uf', 'profissao', 'bio'].forEach(k => {
+      if (typeof g[k] !== 'string') { g[k] = g[k] == null ? '' : String(g[k]); mexidos++; }
+    });
+    if (!Array.isArray(g.cavalosIds)) { g.cavalosIds = []; mexidos++; }
+    if (!Array.isArray(g.grafias)) { g.grafias = g.nome ? [g.nome] : []; mexidos++; }
+  });
+  return mexidos;
+}
+
 function salvar() {
   Store.set(CHAVE_DADOS, extrairDadosDe(S));
   /* publicado + com sessão? grava também no banco, para valer em qualquer
@@ -2660,7 +2690,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 18:59 · 629b21b</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 20:04 · 03074a2</p>
       </div>
     </div>
   </div></footer>`;
@@ -4203,6 +4233,23 @@ function pgCompetidor(el, r) {
 }
 
 /* ---------------- CAVALOS ---------------- */
+/* Em QUAIS ciclos o cavalo competiu de fato — derivado das inscrições,
+   não do campo `c.ciclos` do cadastro. O campo é um resumo que pode ficar
+   velho (nasceu na importação do ranking, ou foi gravado antes de a
+   inscrição existir): o TALERO KENGA estava marcado como 2027 sem ter
+   nenhuma prova em 2027, e o filtro mostrava ele lá. A inscrição é prova
+   documental; o resumo é conveniência. */
+function ciclosCompetidos(cavaloId) {
+  const s = new Set();
+  S.inscricoes.forEach(i => {
+    if (i.cavaloId !== cavaloId) return;
+    const ev = eventoDe(i.eventoId);
+    const c = (ev && ev.ciclo) || i.ciclo;
+    if (c) s.add(String(c));
+  });
+  return Array.from(s).sort();
+}
+
 function pgCavalos(el, r) {
   const q = norm(r.params.q || '');
   const sexo = r.params.sexo || '';
@@ -4211,7 +4258,8 @@ function pgCavalos(el, r) {
   const lista = S.cavalos.filter(c => !c.ancestral)
     .filter(c => (!q || norm(c.nome).includes(q) || norm(c.registro).includes(q) || norm(c.criador).includes(q) || norm(c.afixo).includes(q)))
     .filter(c => !sexo || c.sexo === sexo)
-    .filter(c => !ciclo || (c.ciclos || []).includes(ciclo));
+    /* filtra por ONDE COMPETIU, não pelo resumo do cadastro */
+    .filter(c => !ciclo || ciclosCompetidos(c.id).includes(String(ciclo)));
 
   const pagina = paginaAtual(r.params);
   const pg = paginar(lista, pagina);
@@ -4263,7 +4311,7 @@ function pgCavalos(el, r) {
       return `<a class="cartao-neg" href="#/cavalo/${c.id}" style="display:block;color:inherit">
         <div class="linha entre"><span class="mini fraco">${esc(c.registro)}</span><span class="selo selo-cinza">${esc(c.sexo)}</span></div>
         <h4 class="mt-sm">${esc(c.nome)}</h4>
-        <div class="mini fraco">${esc(c.pelagem)} · ${c.nascimento.slice(0, 4)} · ${esc(c.criador)}</div>
+        <div class="mini fraco">${esc(c.pelagem || '—')} · ${c.nascimento ? String(c.nascimento).slice(0, 4) : 'nasc. não informado'} · ${esc(c.criador || '—')}</div>
         <div class="mini mt-sm">${res.length ? `${res.length} provas · melhor ${num(Math.max(...res.map(x => x.media || 0)), 3)}` : 'Sem apresentações registradas'}</div>
       </a>`;
     }).join('') : `<div style="grid-column:1/-1">${vazio('Nenhum cavalo encontrado.')}</div>`}
@@ -5395,7 +5443,7 @@ function excluirProva(evId) {
     </div>`);
 }
 
-function confirmarExclusaoProva(evId) {
+async function confirmarExclusaoProva(evId) {
   const e = eventoDe(evId);
   if (!e) return;
   const motivo = (($('#excPrvMotivo') || {}).value || '').trim() || 'Exclusão pelo painel';
@@ -5413,7 +5461,26 @@ function confirmarExclusaoProva(evId) {
   S.eventos = S.eventos.filter(x => x.id !== evId);
 
   salvar(); fecharModal();
-  toast('Prova excluída: ' + e.nome + '.');
+
+  /* No portal publicado, excluir SÓ neste navegador não serve: o banco
+     continua com a prova e, na abertura seguinte, ela volta (foi assim que
+     a Lagoa Vermelha reaparecia a cada upload). Aqui a exclusão espera o
+     servidor confirmar; se não confirmar, o aviso é explícito. */
+  let noServidor = false;
+  if (typeof apiDisponivel === 'function' && apiDisponivel() && API.token
+      && typeof sincronizarDados === 'function') {
+    try {
+      await sincronizarDados(true);
+      noServidor = true;
+    } catch (err) {
+      toast('Excluída aqui, mas o servidor NÃO confirmou: ' + (err.message || 'falha') +
+        '. Ela pode voltar ao reabrir — tente de novo.', 'erro');
+      render();
+      return;
+    }
+  }
+
+  toast('Prova excluída: ' + e.nome + '.' + (noServidor ? ' Vale para todos.' : ' Só neste navegador.'));
   render();
 }
 
@@ -5422,9 +5489,15 @@ function modalProva(id) {
   const sessoesDoEvento = e ? S.sessoes.filter(s => s.eventoId === e.id) : [];
   const sessDe = (catId) => sessoesDoEvento.find(s => s.categoriaId === catId);
 
-  /* cada categoria da prova recebe a sua dupla de dois jurados */
+  /* Cada categoria recebe a sua dupla de dois jurados, ESCOLHIDOS do
+     cadastro. Texto livre criava inconsistência: "João Silva", "JOAO
+     SILVA" e "João da Silva" viravam três jurados diferentes na mesma
+     prova. Aqui só entra quem existe — e quem não existe é cadastrado
+     antes, pelo botão "Novo jurado", com o nome conferido. */
   const blocoCategoria = (cat, i) => {
     const s = sessDe(cat.id);
+    const id1 = 'jur_' + cat.id + '_1';
+    const id2 = 'jur_' + cat.id + '_2';
     return `<div class="dupla-cat" data-cat="${cat.id}">
       <div class="dc-cab">
         <b>${esc(cat.nome)}</b>
@@ -5432,11 +5505,21 @@ function modalProva(id) {
       </div>
       <div class="linha-form">
         <div class="campo"><label>Jurado 1</label>
-          <input class="dcJ1" data-cat="${cat.id}" list="listaJurados" autocomplete="off"
-                 value="${s ? esc((juradoDe(s.jurados[0]) || {}).nome || '') : ''}" placeholder="Nome do jurado"></div>
+          ${seletorBusca(id1, S.jurados, {
+            valor: s ? s.jurados[0] : '',
+            placeholder: 'buscar jurado…',
+            rotulo: j => j.nome,
+            extra: j => j.lista || '',
+            campos: j => [j.nome, j.lista, j.cidade, j.uf].join(' ')
+          })}</div>
         <div class="campo"><label>Jurado 2</label>
-          <input class="dcJ2" data-cat="${cat.id}" list="listaJurados" autocomplete="off"
-                 value="${s ? esc((juradoDe(s.jurados[1]) || {}).nome || '') : ''}" placeholder="Nome do jurado"></div>
+          ${seletorBusca(id2, S.jurados, {
+            valor: s ? s.jurados[1] : '',
+            placeholder: 'buscar jurado…',
+            rotulo: j => j.nome,
+            extra: j => j.lista || '',
+            campos: j => [j.nome, j.lista, j.cidade, j.uf].join(' ')
+          })}</div>
       </div>
     </div>`;
   };
@@ -5464,8 +5547,11 @@ function modalProva(id) {
 
       <div class="campo" style="gap:8px">
         <label>Dupla de jurados por categoria</label>
-        <div class="ajuda" style="margin-bottom:2px">Cada categoria é julgada por <b>dois jurados</b> — a mesma dupla em todas as etapas. Sem dupla completa, a publicação fica bloqueada. Digite o nome: se ainda não existir no cadastro, ele é criado aqui.</div>
-        <datalist id="listaJurados">${S.jurados.map(j => `<option value="${esc(j.nome)}"></option>`).join('')}</datalist>
+        <div class="ajuda" style="margin-bottom:2px">Cada categoria é julgada por <b>dois jurados</b> — a mesma dupla em todas as etapas. Sem dupla completa, a publicação fica bloqueada. Escolha da lista: escrever o nome à mão cria jurado repetido com grafia diferente.</div>
+        <div class="linha" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn sec sm" type="button" onclick="modalJuradoRapido()">+ Novo jurado</button>
+          ${S.jurados.length ? '' : '<span class="mini fraco">Nenhum jurado cadastrado ainda.</span>'}
+        </div>
         ${CATEGORIAS.map(blocoCategoria).join('')}
       </div>
 
@@ -5475,35 +5561,33 @@ function modalProva(id) {
       </div>
     </form>`);
 
+  /* liga cada seletor de jurado da dupla (busca por nome, lista, cidade) */
+  CATEGORIAS.forEach(cat => {
+    ['1', '2'].forEach(n => {
+      ligarSeletorBusca('jur_' + cat.id + '_' + n, S.jurados, {
+        rotulo: j => j.nome,
+        extra: j => j.lista || '',
+        campos: j => [j.nome, j.lista, j.cidade, j.uf].join(' '),
+        placeholder: 'buscar jurado…'
+      });
+    });
+  });
+
   $('#fProva').onsubmit = (ev) => {
     ev.preventDefault();
     const nome = $('#prNome').value.trim();
     if (!nome) return toast('Informe o nome da prova.', 'erro');
 
-    /* resolve o nome digitado para um jurado existente; cria quando é novo */
-    const acharOuCriarJurado = (nomeBruto) => {
-      const nome = String(nomeBruto || '').trim().replace(/\s+/g, ' ');
-      if (!nome) return null;
-      const achado = S.jurados.find(j => norm(j.nome) === norm(nome));
-      if (achado) return achado.id;
-      const novoJ = { id: uid('jur'), nome, registro: '', lista: 'Lista 1', cidade: '', uf: '', selo: 'conferido' };
-      S.jurados.push(novoJ);
-      Motor.auditar('Cadastro de jurado', nome, '', 'criado ao cadastrar a prova', 'Cadastro administrativo', 'Cadastro de prova');
-      return novoJ.id;
-    };
-
-    /* lê as duplas: categoria -> [jurado1, jurado2] */
+    /* lê as duplas dos seletores: categoria -> [id, id]. Nada de texto
+       livre, então não há como criar um jurado duplicado por grafia. */
     const duplas = {};
-    const nomes = {};
-    $$('.dcJ1').forEach(inp => {
-      const cat = inp.dataset.cat;
-      const n1 = inp.value.trim();
-      const n2 = (($('.dcJ2[data-cat="' + cat + '"]') || {}).value || '').trim();
-      if (!n1 && !n2) return;
-      if (!n1 || !n2) { duplas[cat] = [null, null]; nomes[cat] = [n1, n2]; return; }
-      if (norm(n1) === norm(n2)) { duplas[cat] = ['__igual', '__igual']; nomes[cat] = [n1, n2]; return; }
-      duplas[cat] = [acharOuCriarJurado(n1), acharOuCriarJurado(n2)];
-      nomes[cat] = [n1, n2];
+    CATEGORIAS.forEach(cat => {
+      const j1 = (($('#jur_' + cat.id + '_1') || {}).value || '').trim();
+      const j2 = (($('#jur_' + cat.id + '_2') || {}).value || '').trim();
+      if (!j1 && !j2) return;
+      if (!j1 || !j2) { duplas[cat.id] = [null, null]; return; }
+      if (j1 === j2) { duplas[cat.id] = ['__igual', '__igual']; return; }
+      duplas[cat.id] = [j1, j2];
     });
     const incompletas = Object.entries(duplas).filter(([, d]) => !d[0] || !d[1] || d[0] === '__igual');
     if (incompletas.length) {
@@ -5561,6 +5645,53 @@ function modalProva(id) {
     render();
   };
 }
+/* Cadastro de jurado SEM SAIR da prova: abre em cima do modal da prova e,
+   ao salvar, o jurado novo passa a existir na lista dos seletores. */
+function modalJuradoRapido() {
+  abrirModal(`<div class="linha entre"><h3>Novo jurado</h3><button class="fechar" onclick="fecharModal()">×</button></div>
+    <p class="mini fraco mt-sm">Ele entra no cadastro de jurados e fica disponível para escolher na dupla. Depois, reabra a prova para selecioná-lo.</p>
+    <form class="form mt-sm" id="fJurRapido">
+      <div class="campo"><label>Nome completo *</label>
+        <input id="jrNome" required placeholder="como consta na lista oficial"></div>
+      <div class="linha-form">
+        <div class="campo"><label>Lista</label>
+          <select id="jrLista"><option>Lista 1</option><option>Lista 2</option><option>Lista 3</option></select></div>
+        <div class="campo"><label>Registro</label><input id="jrReg" placeholder="opcional"></div>
+      </div>
+      <div class="linha-form">
+        <div class="campo"><label>Cidade</label><input id="jrCidade" placeholder="opcional"></div>
+        <div class="campo"><label>UF</label><input id="jrUf" maxlength="2" placeholder="RS"></div>
+      </div>
+      <div class="form-acoes">
+        <button class="btn verde" type="submit">Cadastrar jurado</button>
+        <button class="btn sec" type="button" onclick="fecharModal()">Cancelar</button>
+      </div>
+    </form>`);
+
+  $('#fJurRapido').onsubmit = (ev) => {
+    ev.preventDefault();
+    const nome = $('#jrNome').value.trim().replace(/\s+/g, ' ');
+    if (!nome) return toast('Informe o nome do jurado.', 'erro');
+    /* mesma pessoa com grafia diferente já existe? avisa em vez de duplicar */
+    const igual = S.jurados.find(j => norm(j.nome) === norm(nome));
+    if (igual) {
+      toast('Já existe um jurado com esse nome: ' + igual.nome, 'erro');
+      return;
+    }
+    const novo = {
+      id: uid('jur'), nome, registro: $('#jrReg').value.trim(),
+      lista: $('#jrLista').value, cidade: $('#jrCidade').value.trim(),
+      uf: $('#jrUf').value.toUpperCase(), selo: 'conferido'
+    };
+    S.jurados.push(novo);
+    Motor.auditar('Cadastro de jurado', nome, '', novo.lista, 'Cadastro administrativo', 'Cadastro de jurado');
+    salvar(); fecharModal();
+    toast('Jurado cadastrado: ' + nome + '.');
+    /* volta para a prova, que agora tem o jurado na lista */
+    render();
+  };
+}
+
 function publicarProva(id) {
   const e = eventoDe(id); if (!e) return;
   const sessoes = S.sessoes.filter(s => s.eventoId === id);
@@ -5803,7 +5934,7 @@ function excluirInscricao(insId) {
     </div>`);
 }
 
-function confirmarExclusaoInscricao(insId) {
+async function confirmarExclusaoInscricao(insId) {
   const ins = porId(S.inscricoes, insId);
   if (!ins) return;
   const prova = eventoDe(ins.eventoId) || {};
@@ -5833,7 +5964,19 @@ function confirmarExclusaoInscricao(insId) {
 
   recalcularProva(ins.eventoId);
   salvar(); fecharModal();
-  toast('Inscrição descadastrada: ' + nomeGinete(ins.gineteId) + ' com ' + nomeCavalo(ins.cavaloId) + '.');
+
+  /* mesmo cuidado da prova: sem confirmação do servidor, avisa que volta */
+  let noServidor = false;
+  if (typeof apiDisponivel === 'function' && apiDisponivel() && API.token
+      && typeof sincronizarDados === 'function') {
+    try { await sincronizarDados(true); noServidor = true; }
+    catch (err) {
+      toast('Descadastrada aqui, mas o servidor NÃO confirmou: ' + (err.message || 'falha') + '.', 'erro');
+      render(); return;
+    }
+  }
+  toast('Inscrição descadastrada: ' + nomeGinete(ins.gineteId) + ' com ' + nomeCavalo(ins.cavaloId) + '.'
+    + (noServidor ? ' Vale para todos.' : ' Só neste navegador.'));
   render();
 }
 
@@ -7517,8 +7660,7 @@ function maestroAplicar(plano) {
     plano.aceitos.forEach(a => {
       let c = acharCavalo(a.cavalo);
       if (!c) {
-        c = { id: 'cav-' + String(S.cavalos.length + 1).padStart(4, '0'), nome: a.cavalo,
-              categorias: [], ciclos: [], fonte: 'importação', selo: 'informado' };
+        c = cavaloNovo(a.cavalo);
         S.cavalos.push(c); criados++;
       } else atualizados++;
       ['registro', 'rg', 'sexo', 'pelagem', 'criador', 'pai', 'mae'].forEach(k => {
@@ -7534,8 +7676,7 @@ function maestroAplicar(plano) {
     plano.aceitos.forEach(a => {
       let cav = acharCavalo(a.cavalo);
       if (!cav) {
-        cav = { id: 'cav-' + String(S.cavalos.length + 1).padStart(4, '0'), nome: a.cavalo,
-                categorias: [a.cat], ciclos: [ciclo], fonte: 'importação', selo: 'informado' };
+        cav = cavaloNovo(a.cavalo, [a.cat], [ciclo]);
         S.cavalos.push(cav);
       }
       /* a ficha do animal traz filiação: aproveita no cadastro */
@@ -7814,6 +7955,24 @@ const FICHA_ETAPAS = ['andadura', 'figura', 'vsp-esb', 'mangueira1', 'campo1',
   'mangueira2', 'bayard', 'campo2'];
 
 let FICHA_MSG = '';
+
+/* Cadastro de cavalo com TODOS os campos, para nenhuma tela quebrar depois.
+   O cadastro nascido de importação saía só com nome/categorias/ciclos, e a
+   lista pública fazia `c.nascimento.slice(0,4)` — com o campo ausente, a
+   tela inteira morria no ciclo daquele animal. Campo vazio é melhor que
+   campo faltando. */
+function cavaloNovo(nome, categorias, ciclos) {
+  return {
+    id: 'cav-' + String(S.cavalos.length + 1).padStart(4, '0'),
+    nome: String(nome || '').trim(),
+    registro: '', rg: '', sexo: '', pelagem: '', nascimento: '',
+    criador: '', afixo: '', proprietario: '', expositor: '', domador: '',
+    estabelecimento: '', paiId: null, maeId: null, paiNome: '', maeNome: '',
+    categorias: categorias ? categorias.slice() : [],
+    ciclos: ciclos ? ciclos.slice() : [],
+    fonte: 'importação', selo: 'informado'
+  };
+}
 
 function adFicha() {
   const provas = S.eventos.filter(e => e.tipo === 'credenciadora')
@@ -9316,6 +9475,13 @@ function iniciar() {
     const n = (typeof migrarNotasAntigas === 'function') ? migrarNotasAntigas() : 0;
     if (n) { salvar(); console.log('[migração] ' + n + ' nota(s) antiga(s) normalizada(s)'); }
   } catch (e) { console.warn('[migração] falhou:', e.message); }
+
+  /* cadastro vindo do banco pode estar sem campo (importação antiga).
+     Completa antes do primeiro desenho, senão a lista de cavalos quebra. */
+  try {
+    const m = (typeof normalizarCadastros === 'function') ? normalizarCadastros() : 0;
+    if (m) { salvar(); console.log('[normalização] ' + m + ' campo(s) de cadastro completado(s)'); }
+  } catch (e) { console.warn('[normalização] falhou:', e.message); }
 
   /* Se houver servidor, carrega o banco antes de desenhar a primeira tela.
      Sem servidor (arquivo aberto direto), segue com a base embutida. */
