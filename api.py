@@ -279,6 +279,25 @@ def noticias_publicas():
     return jsonify(itens=itens, fonte="ABCCC — cavalocrioulo.org.br", erro=erro)
 
 
+@app.get("/api/noticias/<nid>")
+def noticia_completa(nid):
+    """A matéria inteira, lida do site da ABCCC para ser lida DENTRO do
+    portal. O texto é da Associação: a tela mostra autor, data e o link da
+    fonte original. Cache de 6 h por notícia."""
+    try:
+        import noticias_abccc
+        url = (request.args.get("url") or "").strip()
+        if url and not re.match(r"^https://(www\.)?cavalocrioulo\.org\.br/", url):
+            url = ""
+        m, erro = noticias_abccc.materia(nid, url)
+    except Exception as e:
+        return jsonify(materia=None, erro=f"leitor indisponível ({type(e).__name__})"), 200
+    if not m:
+        return jsonify(materia=None, erro=erro or "matéria não encontrada",
+                       url_original=url or None), 200
+    return jsonify(materia=m, erro=None)
+
+
 @app.put("/api/admin/config")
 @exige(*PAPEIS_ESCRITA)
 def admin_config_salvar():
