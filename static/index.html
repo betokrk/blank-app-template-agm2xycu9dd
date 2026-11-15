@@ -2633,6 +2633,30 @@ table.tab-comp-final td .mini{margin-top:1px}
 .fc-sec[open]>summary:before{content:'▾ '}
 .fc-sec[open]>summary{margin-bottom:6px}
 
+/* ================= NOTÍCIAS (ABCCC) ================= */
+.nt-destaque{display:block;padding:18px;background:linear-gradient(148deg,#16304d,#24486e);
+  color:#fff;border-radius:var(--raio);text-decoration:none;box-shadow:var(--sombra)}
+.nt-destaque:hover{text-decoration:none;filter:brightness(1.06)}
+.nt-destaque h2{color:#fff;margin:6px 0 8px;font-size:clamp(18px,3vw,23px)}
+.nt-destaque .pequeno{color:rgba(255,255,255,.86);margin:0 0 10px}
+.nt-destaque .mini{color:rgba(255,255,255,.72)}
+.nt-selo{display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.5px;
+  text-transform:uppercase;color:#f0d9a8;border:1px solid rgba(240,217,168,.5);
+  border-radius:999px;padding:2px 9px}
+.nt-lista{display:flex;flex-direction:column}
+.nt-item{display:flex;gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px dashed var(--linha-2);
+  text-decoration:none;color:inherit}
+.nt-item:last-child{border-bottom:0}
+.nt-item:hover{text-decoration:none;background:#fbf8f1}
+.nt-item:hover .nt-tit{color:var(--couro);text-decoration:underline}
+.nt-data{flex:0 0 auto;font-size:12.5px;font-weight:700;color:var(--texto-fraco);
+  font-variant-numeric:tabular-nums;min-width:44px}
+.nt-tit{flex:1;font-size:14.5px;line-height:1.4}
+@media(max-width:520px){
+  .nt-item{gap:9px;padding:10px 0}
+  .nt-tit{font-size:14px}
+}
+
 `;
 
 function injetarCSS() {
@@ -2813,7 +2837,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 20:15 · 8d386bf</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 23:09 · 4a75482</p>
       </div>
     </div>
   </div></footer>`;
@@ -4922,17 +4946,103 @@ function pgHistoria(el) {
   </div>`;
 }
 
-/* ---------------- NOTÍCIAS ---------------- */
+/* ---------------- NOTÍCIAS ----------------
+   As notícias da ABCCC não têm RSS (o site oficial não publica feed). O
+   servidor lê a página pública de notícias e entrega pronta em
+   /api/noticias; aqui só exibimos, com a fonte e o link para o original.
+
+   Sem servidor (arquivo aberto direto), a aba mostra o conteúdo editorial
+   do próprio portal, como antes — nada de imitar notícia que não existe.
+   Aberto no portal publicado, mostra as da ABCCC. */
+let NOTICIAS_ABCCC = null;      /* cache em memória da sessão */
+let NOTICIAS_ESTADO = 'inicio';  /* inicio | carregando | ok | falha */
+
 function pgNoticias(el) {
   el.innerHTML = `
-  <div class="cab-pagina"><div class="ol">Início / Notícias</div><h1>Notícias e conteúdo editorial</h1>
-  <p>Textos assinados, com data e fonte. Votação recreativa nunca se mistura à classificação oficial.</p></div>
-  ${S.artigos.map(a => `<div class="card">
-    <div class="linha entre"><span class="selo selo-dourado">${esc(a.tag)}</span><span class="mini fraco">${dataBR(a.data)} · ${esc(a.autor)}</span></div>
-    <h2 class="mt-sm">${esc(a.titulo)}</h2>
-    <p class="pequeno">${esc(a.resumo)}</p>
-    <button class="btn sec sm" onclick="modalArtigo('${a.id}')">Ler</button>
-  </div>`).join('')}`;
+  <div class="cab-pagina"><div class="ol">Início / Notícias</div><h1>Notícias</h1>
+  <p>Últimas publicações da ABCCC, com o link para a matéria original. Conteúdo do portal aparece depois.</p></div>
+  <div id="ntAbccc"></div>
+  ${S.artigos.length ? `<div class="cab-pagina mt"><h2>Conteúdo do portal</h2></div>
+    ${S.artigos.map(a => `<div class="card">
+      <div class="linha entre"><span class="selo selo-dourado">${esc(a.tag)}</span><span class="mini fraco">${dataBR(a.data)} · ${esc(a.autor)}</span></div>
+      <h2 class="mt-sm">${esc(a.titulo)}</h2>
+      <p class="pequeno">${esc(a.resumo)}</p>
+      <button class="btn sec sm" onclick="modalArtigo('${a.id}')">Ler</button>
+    </div>`).join('')}` : ''}`;
+
+  noticiasCarregar();
+}
+
+function noticiasDesenhar() {
+  const alvo = $('#ntAbccc');
+  if (!alvo) return;
+
+  if (NOTICIAS_ESTADO === 'carregando') {
+    alvo.innerHTML = `<div class="card"><div class="vazio-mini"><b>Buscando as notícias da ABCCC…</b>
+      <span>uma vez a cada 3 horas</span></div></div>`;
+    return;
+  }
+
+  if (NOTICIAS_ESTADO === 'falha') {
+    alvo.innerHTML = `<div class="card"><div class="aviso aviso-atencao">
+      <b>Não consegui buscar as notícias da ABCCC agora.</b>
+      <div class="mini mt-sm">${esc(NOTICIAS_ABCCC && NOTICIAS_ABCCC.erro ? NOTICIAS_ABCCC.erro : 'sem resposta do servidor')}</div>
+      <div class="mini mt-sm">As matérias continuam no site oficial:
+        <a href="https://www.cavalocrioulo.org.br/noticias" target="_blank" rel="noopener">cavalocrioulo.org.br/noticias</a></div>
+      </div></div>`;
+    return;
+  }
+
+  const lista = (NOTICIAS_ABCCC && NOTICIAS_ABCCC.itens) || [];
+  if (!lista.length) {
+    alvo.innerHTML = `<div class="card"><p class="pequeno fraco">Nenhuma notícia publicada pela ABCCC no momento.</p>
+      <a class="btn sec sm" href="https://www.cavalocrioulo.org.br/noticias" target="_blank" rel="noopener">Abrir o site da ABCCC</a></div>`;
+    return;
+  }
+
+  /* a primeira vem como destaque, com o resumo */
+  const [primeira, ...resto] = lista;
+  alvo.innerHTML = `
+    <a class="nt-destaque" href="${esc(primeira.url)}" target="_blank" rel="noopener">
+      <div class="nt-selo">Última · ABCCC</div>
+      <h2>${esc(primeira.titulo)}</h2>
+      ${primeira.resumo ? `<p class="pequeno">${esc(primeira.resumo)}</p>` : ''}
+      <div class="mini fraco">${dataBR(primeira.data)} · ler no site da ABCCC →</div>
+    </a>
+    ${resto.length ? `<div class="card mt"><h3>Publicações anteriores</h3>
+      <div class="nt-lista">
+        ${resto.map(n => `<a class="nt-item" href="${esc(n.url)}" target="_blank" rel="noopener">
+          <span class="nt-data">${dataBR(n.data).slice(0, 5)}</span>
+          <span class="nt-tit">${esc(n.titulo)}</span>
+        </a>`).join('')}
+      </div></div>` : ''}
+    <div class="fonte-linha">Fonte: ABCCC — <a href="https://www.cavalocrioulo.org.br/noticias" target="_blank" rel="noopener">cavalocrioulo.org.br</a>.
+      O texto completo e os direitos são da Associação; aqui aparece o título, um resumo curto e o link.</div>`;
+}
+
+async function noticiasCarregar() {
+  if (NOTICIAS_ESTADO === 'carregando') return;
+  if (NOTICIAS_ESTADO === 'ok' && NOTICIAS_ABCCC) { noticiasDesenhar(); return; }
+
+  if (typeof apiDisponivel !== 'function' || !apiDisponivel()) {
+    /* arquivo aberto direto: não há como ler a ABCCC daqui */
+    NOTICIAS_ESTADO = 'falha';
+    NOTICIAS_ABCCC = { erro: 'o portal está aberto como arquivo, sem servidor' };
+    noticiasDesenhar();
+    return;
+  }
+
+  NOTICIAS_ESTADO = 'carregando';
+  noticiasDesenhar();
+  try {
+    const r = await api('/noticias');
+    NOTICIAS_ABCCC = r || { itens: [] };
+    NOTICIAS_ESTADO = (!r || !Array.isArray(r.itens) || !r.itens.length) ? 'falha' : 'ok';
+  } catch (e) {
+    NOTICIAS_ABCCC = { erro: e.message || 'servidor não respondeu' };
+    NOTICIAS_ESTADO = 'falha';
+  }
+  if (lerHash().aba === 'noticias') noticiasDesenhar();
 }
 function modalArtigo(id) {
   const a = porId(S.artigos, id); if (!a) return;
