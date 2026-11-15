@@ -2793,13 +2793,78 @@ function lerHash(entrada) {
   return { aba: partes[0] || 'inicio', sub: partes[1] || '', params, caminho: partes };
 }
 
+/* ---------- URL real para o Google ----------
+   O app nasceu em hash (#/cavalo/213), que o buscador não trata como página
+   separada. Quando o portal está servido por http(s), a rota também vira
+   caminho de verdade (/cavalo/213) e é isso que o servidor usa para montar
+   o título daquela página. Em arquivo aberto direto (file://) ou no
+   visualizador com iframe bloqueado, tudo continua funcionando pelo hash. */
+function podeUsarCaminho() {
+  try { return location.protocol.startsWith('http'); } catch (e) { return false; }
+}
+
+function rotaDaBarra() {
+  let caminho = '';
+  try { caminho = location.pathname || ''; } catch (e) { return ''; }
+  caminho = caminho.replace(/\/index\.html?$/i, '').replace(/^\/+|\/+$/g, '');
+  if (!caminho) return '';
+  const primeira = caminho.split('/')[0];
+  /* só as rotas conhecidas viram caminho: o resto é arquivo estático */
+  const conhecidas = ['rankings', 'final', 'provas', 'credenciadoras', 'competidores',
+    'cavalos', 'meus-cavalos', 'como-funciona', 'noticias', 'estatisticas',
+    'jurados', 'genealogia', 'classificados', 'historia', 'sobre', 'busca',
+    'entrar', 'admin', 'prova', 'cavalo', 'competidor', 'jurado', 'conjunto', 'ciclo'];
+  if (!conhecidas.includes(primeira)) return '';
+  let q = '';
+  try { q = location.search || ''; } catch (e) { }
+  return '#/' + caminho + q;
+}
+
+function caminhoDaRota(h) {
+  const bruto = normalizarHash(h).replace(/^#\/?/, '');
+  const [caminho, query] = bruto.split('?');
+  if (!caminho || caminho === 'inicio') return '/' + (query ? '?' + query : '');
+  return '/' + caminho + (query ? '?' + query : '');
+}
+
 function navegar(destino) {
   const h = normalizarHash(destino);
   HASH_ATUAL = h;
+  /* caminho real (e não hash) quando o portal está publicado: é a URL que o
+     Google indexa e a que a pessoa copia para compartilhar */
+  if (podeUsarCaminho() && typeof history !== 'undefined' && history.pushState) {
+    try {
+      history.pushState(null, '', caminhoDaRota(h));
+      render();
+      return;
+    } catch (e) { /* segue pelo hash */ }
+  }
   try {
     if (hashDoNavegador() !== h) location.hash = h;
   } catch (e) { /* iframe sem permissão: a rota em memória resolve */ }
   render();
+}
+
+/* Título da aba por página. O servidor já entrega o título do Google na
+   primeira carga; isto mantém a aba coerente quando a pessoa navega por
+   dentro do app, sem recarregar. */
+function tituloDaPagina(r) {
+  const nomes = {
+    inicio: '', rankings: 'Rankings', final: 'Final', provas: 'Provas',
+    credenciadoras: 'Credenciadoras', competidores: 'Competidores',
+    cavalos: 'Cavalos', 'meus-cavalos': 'Meus cavalos',
+    'como-funciona': 'Como funciona', noticias: 'Notícias',
+    estatisticas: 'Estatísticas', jurados: 'Jurados', genealogia: 'Genealogia',
+    classificados: 'Classificados', historia: 'História', sobre: 'Sobre',
+    busca: 'Busca', entrar: 'Entrar'
+  };
+  let nome = nomes[r.aba];
+  if (r.aba === 'cavalo') { const c = cavalo(r.sub); nome = c ? c.nome : 'Cavalo'; }
+  else if (r.aba === 'prova') { const e = eventoDe(r.sub); nome = e ? e.nome : 'Prova'; }
+  else if (r.aba === 'competidor') { const g = gineteDe(r.sub); nome = g ? g.nome : 'Competidor'; }
+  else if (r.aba === 'jurado') { const j = juradoDe(r.sub); nome = j ? j.nome : 'Jurado'; }
+  if (!nome) { document.title = 'Freio do Proprietário | Cavalo Crioulo — rankings, provas e resultados'; return; }
+  document.title = nome + ' | Freio do Proprietário';
 }
 
 function render() {
@@ -2828,6 +2893,7 @@ function render() {
     admin: pgAdmin, busca: pgBusca, conjunto: pgConjunto, sobre: pgSobre
   };
   (mapa[r.aba] || pgInicio)(alvo, r);
+  try { tituloDaPagina(r); } catch (e) { }
   ligarNav();
   /* contabiliza a visita (página pública; o admin não infla a audiência) */
   if (!ehAdminPg && typeof analyticsRegistrar === 'function') {
@@ -2840,7 +2906,24 @@ function render() {
       bannerImpressao(el.dataset.banner);
     }
   });
+  linksDeVerdade(app);
   window.scrollTo(0, 0);
+}
+
+/* ---------- link com href de verdade ----------
+   O HTML nasce com href="#/cavalo/213". Trocar por href="/cavalo/213" no que
+   já está montado dá ao Google um link que ele segue, sem mexer em cada tela:
+   o app inteiro usa a mesma âncora. A navegação continua sendo por clique
+   capturado, então nada muda para quem usa. */
+function linksDeVerdade(raiz) {
+  if (!podeUsarCaminho()) return;
+  try {
+    raiz.querySelectorAll('a[href^="#/"]').forEach(a => {
+      const h = a.getAttribute('href');
+      if (!h) return;
+      a.setAttribute('href', caminhoDaRota(h));
+    });
+  } catch (e) { }
 }
 
 /* ---------- navegação à prova de iframe ---------- */
@@ -2850,10 +2933,16 @@ let NAV_LIGADA = false;
 function ligarNav() {
   if (!NAV_LIGADA) {
     document.addEventListener('click', (ev) => {
-      const alvo = ev.target && ev.target.closest ? ev.target.closest('a[href^="#/"], a[data-rota]') : null;
+      const alvo = ev.target && ev.target.closest
+        ? ev.target.closest('a[href^="#/"], a[href^="/"], a[data-rota]') : null;
       if (!alvo) return;
-      const destino = alvo.getAttribute('data-rota') || alvo.getAttribute('href');
-      if (!destino || destino.charAt(0) !== '#') return;
+      let destino = alvo.getAttribute('data-rota') || alvo.getAttribute('href');
+      if (!destino) return;
+      /* href="/cavalo/213" (link de verdade) volta a ser rota interna */
+      if (destino.charAt(0) === '/') destino = '#' + destino;
+      if (destino.charAt(0) !== '#') return;
+      /* link externo, PDF, download e âncora simples seguem o curso normal */
+      if (alvo.getAttribute('target') === '_blank' || alvo.hasAttribute('download')) return;
       ev.preventDefault();
       fecharModal();
       navegar(destino);
@@ -2907,7 +2996,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)}${dataCarga() ? ' · dados de ' + dataCarga() : ''}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-15 00:08 · 101f346</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-15 00:26 · e6e2003</p>
       </div>
     </div>
   </div></footer>`;
@@ -7618,7 +7707,8 @@ function modalCavalo(id) {
     <form class="form mt-sm" id="fCav">
       <div class="campo"><label>Nome completo *</label><input id="cvNome" value="${c ? esc(c.nome) : ''}" required></div>
       <div class="linha-form">
-        <div class="campo"><label>Registro ABCCC *</label><input id="cvReg" value="${c ? esc(c.registro) : ''}" required placeholder="ABCCC-00000"></div>
+        <div class="campo"><label>Registro ABCCC</label><input id="cvReg" value="${c ? esc(c.registro) : ''}" placeholder="opcional — deixe vazio se não houver">
+        <div class="mini fraco">Não é obrigatório. O nome do animal é o que identifica o cadastro no portal.</div></div>
         <div class="campo"><label>Sexo</label><select id="cvSexo">
           <option value="macho" ${c && c.sexo === 'macho' ? 'selected' : ''}>Macho</option>
           <option value="fêmea" ${c && c.sexo === 'fêmea' ? 'selected' : ''}>Fêmea</option></select></div>
@@ -7645,8 +7735,12 @@ function modalCavalo(id) {
   $('#fCav').onsubmit = (ev) => {
     ev.preventDefault();
     const nome = $('#cvNome').value.trim(), reg = $('#cvReg').value.trim();
-    const dup = S.cavalos.find(x => norm(x.registro) === norm(reg) && (!c || x.id !== c.id));
-    if (dup) { toast('Já existe um cavalo com esse registro: ' + dup.nome, 'erro'); return; }
+    /* o registro passou a ser opcional: sem ele não existe chave para comparar,
+       então dois animais sem registro não podem ser tratados como duplicata. */
+    if (reg) {
+      const dup = S.cavalos.find(x => norm(x.registro) === norm(reg) && (!c || x.id !== c.id));
+      if (dup) { toast('Já existe um cavalo com esse registro: ' + dup.nome, 'erro'); return; }
+    }
     const dados = {
       nome, registro: reg, sexo: $('#cvSexo').value, nascimento: $('#cvNasc').value,
       pelagem: $('#cvPelagem').value.trim(), criador: $('#cvCriador').value.trim(),
@@ -10388,9 +10482,18 @@ function iniciar() {
   app.id = 'app';
   document.body.appendChild(app);
 
-  /* início: lê a rota do hash quando possível; se o visualizador bloquear, começa no Início */
-  HASH_ATUAL = hashDoNavegador() || '#/inicio';
+  /* início: a rota pode vir do CAMINHO (/cavalo/213, é o que o Google indexa)
+     ou do hash (#/cavalo/213, usado no arquivo aberto e no visualizador).
+     O caminho tem prioridade porque é a URL pública de verdade. */
+  HASH_ATUAL = (typeof rotaDaBarra === 'function' && rotaDaBarra()) || hashDoNavegador() || '#/inicio';
   try { window.addEventListener('hashchange', () => { const h = hashDoNavegador(); if (h && h !== HASH_ATUAL) { HASH_ATUAL = h; render(); } }); } catch (e) { }
+  /* voltar/avançar do navegador: a URL mudou, então a rota vem do caminho */
+  try {
+    window.addEventListener('popstate', () => {
+      const h = (typeof rotaDaBarra === 'function' && rotaDaBarra()) || hashDoNavegador() || '#/inicio';
+      if (h && h !== HASH_ATUAL) { HASH_ATUAL = h; render(); }
+    });
+  } catch (e) { }
 
   /* Convergência de dados antigos (notas gravadas com peso 1, sem `bruta`).
      Roda antes do primeiro desenho e regrava se mudou alguma coisa. */
