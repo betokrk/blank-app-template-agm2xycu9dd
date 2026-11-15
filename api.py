@@ -261,6 +261,24 @@ def config_publica():
     return jsonify(c or {})
 
 
+@app.get("/api/noticias")
+def noticias_publicas():
+    """Notícias da ABCCC lidas do site oficial.
+
+    A ABCCC não publica RSS, então o servidor lê a página de notícias e
+    entrega já tratada (título, data, resumo, link). O cache fica aqui,
+    não no navegador: um visitante a mais não vira uma leitura a mais no
+    site da Associação. Em falha, devolve o último resultado bom e avisa.
+    """
+    try:
+        import noticias_abccc
+        itens, erro = noticias_abccc.noticias(12)
+    except Exception as e:
+        return jsonify(itens=[], fonte="ABCCC — cavalocrioulo.org.br",
+                       erro=f"leitor indisponível ({type(e).__name__})"), 200
+    return jsonify(itens=itens, fonte="ABCCC — cavalocrioulo.org.br", erro=erro)
+
+
 @app.put("/api/admin/config")
 @exige(*PAPEIS_ESCRITA)
 def admin_config_salvar():
