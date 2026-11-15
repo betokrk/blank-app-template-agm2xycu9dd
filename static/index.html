@@ -2652,6 +2652,17 @@ table.tab-comp-final td .mini{margin-top:1px}
 .nt-data{flex:0 0 auto;font-size:12.5px;font-weight:700;color:var(--texto-fraco);
   font-variant-numeric:tabular-nums;min-width:44px}
 .nt-tit{flex:1;font-size:14.5px;line-height:1.4}
+
+.nt-corpo{max-height:min(72vh,720px);overflow:auto;padding-right:4px}
+.nt-h{font-size:clamp(18px,3.2vw,23px);margin:0 0 6px;line-height:1.25}
+.nt-meta{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--linha-2)}
+.nt-texto p{font-size:15px;line-height:1.62;margin:0 0 12px;color:var(--texto)}
+.nt-texto p:last-child{margin-bottom:0}
+.nt-destaque{cursor:pointer}
+.nt-destaque:focus-visible{outline:3px solid rgba(184,134,43,.6);outline-offset:2px}
+button.nt-item{background:none;border:0;width:100%;text-align:left;font:inherit;
+  color:inherit;cursor:pointer;font-family:inherit}
+
 @media(max-width:520px){
   .nt-item{gap:9px;padding:10px 0}
   .nt-tit{font-size:14px}
@@ -2837,7 +2848,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 23:09 · 4a75482</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-14 23:46 · 856f741</p>
       </div>
     </div>
   </div></footer>`;
@@ -5003,26 +5014,29 @@ function noticiasDesenhar() {
   /* a primeira vem como destaque, com o resumo */
   const [primeira, ...resto] = lista;
   alvo.innerHTML = `
-    <a class="nt-destaque" href="${esc(primeira.url)}" target="_blank" rel="noopener">
+    <div class="nt-destaque" role="button" tabindex="0"
+         onclick="noticiaAbrir('${esc(String(primeira.id))}','${esc(primeira.url)}')"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();noticiaAbrir('${esc(String(primeira.id))}','${esc(primeira.url)}')}">
       <div class="nt-selo">Última · ABCCC</div>
       <h2>${esc(primeira.titulo)}</h2>
       ${primeira.resumo ? `<p class="pequeno">${esc(primeira.resumo)}</p>` : ''}
-      <div class="mini fraco">${dataBR(primeira.data)} · ler no site da ABCCC →</div>
-    </a>
+      <div class="mini fraco">${dataBR(primeira.data)} · abrir a matéria →</div>
+    </div>
     ${resto.length ? `<div class="card mt"><h3>Publicações anteriores</h3>
       <div class="nt-lista">
-        ${resto.map(n => `<a class="nt-item" href="${esc(n.url)}" target="_blank" rel="noopener">
+        ${resto.map(n => `<button class="nt-item" type="button"
+            onclick="noticiaAbrir('${esc(String(n.id))}','${esc(n.url)}')">
           <span class="nt-data">${dataBR(n.data).slice(0, 5)}</span>
           <span class="nt-tit">${esc(n.titulo)}</span>
-        </a>`).join('')}
+        </button>`).join('')}
       </div></div>` : ''}
     <div class="fonte-linha">Fonte: ABCCC — <a href="https://www.cavalocrioulo.org.br/noticias" target="_blank" rel="noopener">cavalocrioulo.org.br</a>.
-      O texto completo e os direitos são da Associação; aqui aparece o título, um resumo curto e o link.</div>`;
+      O texto é da Associação; o portal mostra a matéria com autor, data e link da fonte.</div>`;
+    armarCarregadas();
 }
 
 async function noticiasCarregar() {
   if (NOTICIAS_ESTADO === 'carregando') return;
-  if (NOTICIAS_ESTADO === 'ok' && NOTICIAS_ABCCC) { noticiasDesenhar(); return; }
 
   if (typeof apiDisponivel !== 'function' || !apiDisponivel()) {
     /* arquivo aberto direto: não há como ler a ABCCC daqui */
@@ -5032,17 +5046,40 @@ async function noticiasCarregar() {
     return;
   }
 
-  NOTICIAS_ESTADO = 'carregando';
-  noticiasDesenhar();
+  /* Já tem a lista na memória deste navegador? Mostra na hora e busca de
+     novo em segundo plano. Antes ela mostrava e NÃO buscava: quem deixava
+     a aba aberta nunca via notícia nova, e a página parecia congelada.
+     O servidor também tem cache de 3 h, então essa nova busca custa pouco. */
+  const tinhaLista = NOTICIAS_ESTADO === 'ok' && NOTICIAS_ABCCC;
+  if (tinhaLista) noticiasDesenhar();
+  else { NOTICIAS_ESTADO = 'carregando'; noticiasDesenhar(); }
+
   try {
     const r = await api('/noticias');
-    NOTICIAS_ABCCC = r || { itens: [] };
-    NOTICIAS_ESTADO = (!r || !Array.isArray(r.itens) || !r.itens.length) ? 'falha' : 'ok';
+    /* só troca se veio conteúdo: falha não apaga o que já está na tela */
+    if (r && Array.isArray(r.itens) && r.itens.length) {
+      NOTICIAS_ABCCC = r;
+      NOTICIAS_ESTADO = 'ok';
+    } else {
+      if (!tinhaLista) { NOTICIAS_ABCCC = r || { itens: [] }; NOTICIAS_ESTADO = 'falha'; }
+    }
   } catch (e) {
-    NOTICIAS_ABCCC = { erro: e.message || 'servidor não respondeu' };
-    NOTICIAS_ESTADO = 'falha';
+    if (!tinhaLista) {
+      NOTICIAS_ABCCC = { erro: e.message || 'servidor não respondeu' };
+      NOTICIAS_ESTADO = 'falha';
+    }
   }
   if (lerHash().aba === 'noticias') noticiasDesenhar();
+}
+
+/* Quando a aba volta a ficar visível (o dono trocou de app e voltou), busca
+   de novo. Sem isso, quem deixa o portal aberto no celular fica com a lista
+   do dia anterior até fechar o navegador. */
+function noticiasAoVoltar() {
+  if (document.visibilityState !== 'visible') return;
+  if (lerHash().aba !== 'noticias') return;
+  if (NOTICIAS_ESTADO === 'carregando') return;
+  noticiasCarregar();
 }
 function modalArtigo(id) {
   const a = porId(S.artigos, id); if (!a) return;
@@ -5134,6 +5171,80 @@ function modalContato(tipo, alvo) {
     salvar(); fecharModal(); toast('Solicitação registrada. Retorno por e-mail.'); render();
   };
 }
+
+/* ---------------- MATÉRIA DA ABCCC DENTRO DO PORTAL ----------------
+   O visitante lê a notícia sem sair do site. O texto vem do servidor, que
+   lê a página da ABCCC e guarda em cache. O crédito fica no topo (autor e
+   data) e no rodapé (link da fonte): o texto é da Associação, não nosso.
+
+   Abrir dentro do portal tem um custo: se a ABCCC mudar o layout, o corpo
+   pode vir incompleto. Por isso a tela sempre oferece o link original, e
+   quando não consegue ler avisa em vez de mostrar matéria pela metade.  */
+
+const MATERIAS = {};   /* id -> matéria já lida nesta sessão */
+
+function noticiaAbrir(id, url) {
+  id = String(id || '');
+  abrirModal(`<div class="linha entre"><h3>Notícia</h3>
+      <button class="fechar" onclick="fecharModal()">×</button></div>
+    <div id="ntCorpo" class="nt-corpo mt-sm">
+      <div class="vazio-mini"><b>Abrindo a matéria…</b><span>lendo do site da ABCCC</span></div>
+    </div>`);
+  noticiaLer(id, url);
+}
+
+async function noticiaLer(id, url) {
+  const alvo = $('#ntCorpo');
+  if (!alvo) return;
+
+  if (MATERIAS[id]) { noticiaDesenhar(MATERIAS[id], alvo); return; }
+
+  if (typeof apiDisponivel !== 'function' || !apiDisponivel()) {
+    alvo.innerHTML = `<div class="aviso aviso-atencao"><b>Sem servidor não consigo ler a matéria.</b>
+      <div class="mini mt-sm">No portal publicado ela abre aqui dentro.</div>
+      ${url ? `<a class="btn sec sm mt-sm" href="${esc(url)}" target="_blank" rel="noopener">Abrir no site da ABCCC</a>` : ''}</div>`;
+    return;
+  }
+
+  try {
+    const r = await api('/noticias/' + encodeURIComponent(id) + (url ? '?url=' + encodeURIComponent(url) : ''));
+    if (!r || !r.materia || !r.materia.corpo) {
+      alvo.innerHTML = `<div class="aviso aviso-atencao"><b>Não consegui abrir a matéria agora.</b>
+        <div class="mini mt-sm">${esc((r && r.erro) || 'sem resposta do servidor')}</div>
+        ${url ? `<a class="btn sec sm mt-sm" href="${esc(url)}" target="_blank" rel="noopener">Ler no site da ABCCC</a>` : ''}</div>`;
+      return;
+    }
+    MATERIAS[id] = r.materia;
+    noticiaDesenhar(r.materia, alvo);
+  } catch (e) {
+    alvo.innerHTML = `<div class="aviso aviso-atencao"><b>Não consegui abrir a matéria.</b>
+      <div class="mini mt-sm">${esc(e.message || 'falha de conexão')}</div>
+      ${url ? `<a class="btn sec sm mt-sm" href="${esc(url)}" target="_blank" rel="noopener">Ler no site da ABCCC</a>` : ''}</div>`;
+  }
+}
+
+function noticiaDesenhar(m, alvo) {
+  const paragrafos = (m.paragrafos && m.paragrafos.length)
+    ? m.paragrafos
+    : String(m.corpo || '').split('\n\n');
+
+  alvo.innerHTML = `
+    <h2 class="nt-h">${esc(m.titulo)}</h2>
+    <div class="mini fraco nt-meta">
+      ${m.data ? dataBR(m.data) : ''}${m.autor ? ' · ' + esc(m.autor) : ''} · ABCCC
+    </div>
+    <div class="nt-texto">
+      ${paragrafos.map(p => `<p>${esc(p)}</p>`).join('')}
+    </div>
+    <div class="fonte-linha">Texto e imagens: ABCCC.
+      <a href="${esc(m.url)}" target="_blank" rel="noopener">Ver a matéria original</a>.</div>
+    <div class="linha mt-sm"><button class="btn sec" onclick="fecharModal()">Fechar</button></div>`;
+  alvo.scrollTop = 0;
+}
+
+/* as imagens da matéria não vieram no texto: se houver link, avisa que as
+   fotos estão no original (evita parecer que a notícia está sem imagem) */
+function armarCarregadas() { /* reservado */ }
 
 
 /* ÁREA DO USUÁRIO OCULTA (decisão de 08/11: só acesso geral e administrativo).
@@ -9764,6 +9875,13 @@ function iniciar() {
   }
 
   registrarServiceWorker();
+
+  /* ao voltar para a aba do portal, atualiza as notícias */
+  try {
+    document.addEventListener('visibilitychange', () => {
+      if (typeof noticiasAoVoltar === 'function') noticiasAoVoltar();
+    });
+  } catch (e) { }
 
   /* atalho: "/" foca a busca da tela quando existir */
   document.addEventListener('keydown', (e) => {
