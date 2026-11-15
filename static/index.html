@@ -13,6 +13,21 @@
 <link rel="manifest" href="portal-freio.webmanifest">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b3a5c'/%3E%3Ccircle cx='32' cy='32' r='17' fill='none' stroke='%23b8862b' stroke-width='4.5'/%3E%3Cpath d='M22 41V23h6.5a6 6 0 0 1 0 12H22' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%231b3a5c'/%3E%3Ccircle cx='90' cy='90' r='48' fill='none' stroke='%23b8862b' stroke-width='12'/%3E%3Cpath d='M62 115V65h18a17 17 0 0 1 0 34H62' fill='none' stroke='%23fff' stroke-width='11' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<!-- Compartilhamento: sem estas linhas o link chegava cru no WhatsApp, sem título nem imagem. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Portal Freio do Proprietário">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:title" content="Portal Freio do Proprietário — rankings e resultados">
+<meta property="og:description" content="Rankings do ciclo, provas, resultados, cavalos, ginetes e a agenda das credenciadoras do Freio do Proprietário.">
+<meta property="og:url" content="https://proprietario.net/">
+<meta property="og:image" content="https://proprietario.net/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Portal Freio do Proprietário">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://proprietario.net/og.png">
+<meta name="twitter:title" content="Portal Freio do Proprietário — rankings e resultados">
+<meta name="twitter:description" content="Rankings do ciclo, provas, resultados, cavalos, ginetes e a agenda das credenciadoras.">
 <style>
   /* proteção contra tela branca: o app se monta via JS */
   body{background:#f7f3ea}
@@ -2559,6 +2574,33 @@ table.tab-comp-final td .mini{margin-top:1px}
 .ag-selo{position:absolute;top:-7px;right:6px;font-size:7.5px;letter-spacing:.06em;text-transform:uppercase;
   background:var(--azul);color:#fff;border-radius:3px;padding:2px 4px}
 
+/* ---------- credenciadoras (página pública) ---------- */
+.cred-lista{display:flex;flex-direction:column;gap:0;min-width:0}
+.cred-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--linha-2);min-width:0}
+.cred-item:last-child{border-bottom:0}
+.cred-item.destaque{padding:13px 14px;border:1px solid var(--azul);border-radius:10px;background:#f2f7f3;margin-top:8px}
+.cred-data{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:46px;
+  padding-right:10px;border-right:1px solid var(--linha-2)}
+.cred-data b{font-family:Georgia,serif;font-size:16px;color:var(--azul);font-variant-numeric:tabular-nums;line-height:1}
+.cred-data span{font-size:9.5px;color:var(--texto-fraco);font-variant-numeric:tabular-nums}
+.cred-txt{flex:1;min-width:0}
+.cred-cidade{font-size:13.5px;font-weight:600;color:var(--texto);overflow:hidden;text-overflow:ellipsis}
+.cred-item .btn{flex:0 0 auto}
+
+/* ---------- como funciona ---------- */
+.cf-passo{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--linha-2);min-width:0}
+.cf-passo:last-child{border-bottom:0}
+.cf-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--azul);color:#fff;
+  display:flex;align-items:center;justify-content:center;font:700 12px/1 -apple-system,sans-serif}
+.cf-txt{flex:1;min-width:0}
+.cf-txt b{display:block;font-size:13.5px;color:var(--texto);margin-bottom:3px}
+.cf-txt p{font-size:12.5px;line-height:1.55;color:var(--texto-suave);margin:0}
+.cf-etapa{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px dashed var(--linha-2);min-width:0}
+.cf-etapa:last-child{border-bottom:0}
+.cf-etapa b{font-size:12.5px;color:var(--texto);flex:0 0 auto}
+.cf-etapa span{font-size:11.5px;color:var(--texto-fraco);min-width:0}
+.cf-etapa i{font-style:normal;font-size:11px;color:var(--azul);margin-left:auto;flex:0 0 auto}
+
 
 /* ---------- Maestro IA ---------- */
 .ms-fontes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px;min-width:0}
@@ -2683,7 +2725,8 @@ const ABAS_OCULTAS = ['genealogia', 'historia', 'classificados', 'sobre'];
 
 const MENU_COMPLETO = [
   ['inicio', 'Início', 'inicio'], ['rankings', 'Rankings', 'rankings'], ['final', 'Final', 'final'],
-  ['provas', 'Provas', 'provas'], ['competidores', 'Competidores', 'competidores'],
+  ['provas', 'Provas', 'provas'], ['credenciadoras', 'Credenciadoras', 'credenciadoras'],
+  ['competidores', 'Competidores', 'competidores'],
   ['cavalos', 'Cavalos', 'cavalos'], ['jurados', 'Jurados', 'jurados'],
   ['genealogia', 'Genealogia', 'genealogia'], ['estatisticas', 'Estatísticas', 'estatisticas'],
   ['classificados', 'Classificados', 'classificados'], ['historia', 'História', 'historia'],
@@ -2778,6 +2821,8 @@ function render() {
     cavalos: pgCavalos, jurados: pgJurados, genealogia: pgGenealogia, estatisticas: pgEstatisticas,
     classificados: pgClassificados, historia: pgHistoria, noticias: pgNoticias, sobre: pgSobre,
     final: pgFinal, ciclo: pgCiclo,
+    credenciadoras: pgCredenciadoras, 'meus-cavalos': pgMeusCavalos,
+    'como-funciona': pgComoFunciona,
     prova: pgProva, competidor: pgCompetidor, cavalo: pgCavalo, jurado: pgJurado,
     entrar: () => renderEntrar(),
     admin: pgAdmin, busca: pgBusca, conjunto: pgConjunto, sobre: pgSobre
@@ -2826,6 +2871,20 @@ function ligarNav() {
   };
 }
 
+/* Data REAL do dado no portal. Antes o rodapé mostrava a data do dia e
+   dizia "atualizado hoje" mesmo com acervo de semanas atrás.
+   A data vem do próprio conteúdo carregado (prova mais recente e carimbo de
+   criação dos resultados), nunca do relógio do visitante. */
+function dataCarga() {
+  const marcas = [];
+  (S.eventos || []).forEach(e => { if (e.dataInicio) marcas.push(String(e.dataInicio).slice(0, 10)); });
+  (S.resultados || []).forEach(r => { if (r.criadoEm) marcas.push(String(r.criadoEm).slice(0, 10)); });
+  const validas = marcas.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (!validas.length) return '';
+  const ultima = validas[validas.length - 1];
+  return ultima <= hojeISO() ? dataBR(ultima) : '';
+}
+
 function rodapeHTML() {
   return `<footer class="rodape"><div class="wrap">
     <div class="rodape-aviso">
@@ -2847,8 +2906,8 @@ function rodapeHTML() {
       <div>
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
-        <p class="mini">Ciclo ${esc(S.cicloAtivo)} · atualizado em ${dataBR(hojeISO())}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-14 23:46 · 856f741</p>
+        <p class="mini">Ciclo ${esc(S.cicloAtivo)}${dataCarga() ? ' · dados de ' + dataCarga() : ''}</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-15 00:08 · 101f346</p>
       </div>
     </div>
   </div></footer>`;
@@ -4397,6 +4456,14 @@ function pgCompetidor(el, r) {
    inscrição existir): o TALERO KENGA estava marcado como 2027 sem ter
    nenhuma prova em 2027, e o filtro mostrava ele lá. A inscrição é prova
    documental; o resumo é conveniência. */
+/* Busca de cavalo: nome, registro, afixo, criador, PROPRIETÁRIO, expositor e
+   domador. Faltava proprietário — quem comprou um animal não achava o próprio
+   cavalo buscando o nome dele. Casa por palavras em qualquer ordem. */
+function casaCavalo(c, termo) {
+  return casaBusca(termo, [c.nome, c.registro, c.rg, c.afixo, c.criador,
+    c.proprietario, c.expositor, c.domador, c.estabelecimento].filter(Boolean).join(' '));
+}
+
 function ciclosCompetidos(cavaloId) {
   const s = new Set();
   S.inscricoes.forEach(i => {
@@ -4414,7 +4481,7 @@ function pgCavalos(el, r) {
   /* ciclo: vazio = todos os ciclos (sem filtro, como antes) */
   const ciclo = r.params.ciclo || '';
   const lista = S.cavalos.filter(c => !c.ancestral)
-    .filter(c => (!q || norm(c.nome).includes(q) || norm(c.registro).includes(q) || norm(c.criador).includes(q) || norm(c.afixo).includes(q)))
+    .filter(c => (!q || casaCavalo(c, q)))
     .filter(c => !sexo || c.sexo === sexo)
     /* filtra por ONDE COMPETIU, não pelo resumo do cadastro */
     .filter(c => !ciclo || ciclosCompetidos(c.id).includes(String(ciclo)));
@@ -4448,7 +4515,7 @@ function pgCavalos(el, r) {
   <div class="cab-pagina"><div class="ol">Início / Cavalos</div><h1>Cavalos</h1>
   <p>${ciclo ? `${num(lista.length)} animais no ciclo ${esc(ciclo)}` : `${num(S.cavalos.filter(c => !c.ancestral).length)} animais em todos os ciclos`}. Ficha por nome, com histórico de apresentações por ginete e categoria.</p></div>
   <div class="card">
-    ${campoBusca('bCav', r.params.q || '', 'Nome, registro ABCCC, afixo ou criador…')}
+    ${campoBusca('bCav', r.params.q || '', 'Nome, registro, criador ou proprietário…')}
     <div class="chips mt-sm">
       <a class="chip ${!ciclo ? 'on' : ''}" href="${linkCicloCav('')}">Todos os ciclos</a>
       ${ciclosDisponiveis().map(c => `<a class="chip ${ciclo === c.id ? 'on' : ''}" href="${linkCicloCav(c.id)}">${esc(c.nome.replace('Ciclo ', ''))}</a>`).join('')}
@@ -5245,6 +5312,495 @@ function noticiaDesenhar(m, alvo) {
 /* as imagens da matéria não vieram no texto: se houver link, avisa que as
    fotos estão no original (evita parecer que a notícia está sem imagem) */
 function armarCarregadas() { /* reservado */ }
+
+
+/* =====================================================================
+   MEUS CAVALOS — visão por proprietário, sem login.
+
+   O domínio é proprietario.net e a pergunta que a pessoa faz é "onde está
+   o MEU cavalo?". Antes só dava para achar o animal sabendo o nome dele.
+   Aqui ela digita o próprio nome e vê todos os animais do plantel, com
+   resultado, melhor nota e em que ciclos competiu.
+
+   Combina duas fontes, porque as duas existem no portal:
+     1. o campo `proprietario` do cadastro do animal (catálogo e fichas);
+     2. o `expositor` do evento, quando o dado veio por importação.
+   Nada é inventado: se não houver cadastro com esse nome, a tela diz isso
+   e sugere a busca por cavalo.
+   ===================================================================== */
+
+let TERMO_DONO = '';
+
+function pgMeusCavalos(el, r) {
+  /* o termo vive também fora do campo: a tela se redesenha quando a API
+     responde e o que a pessoa digitou se perdia (a lista voltava ao início). */
+  const termo = (r.params.proprietario || TERMO_DONO || '').trim();
+  TERMO_DONO = termo;
+  const ciclo = r.params.ciclo || '';
+
+  /* ---- nomes de proprietário que existem no acervo ----
+     Serve de sugestão: evita a pessoa digitar "seu zé" e não achar nada. */
+  const nomes = proprietariosConhecidos();
+
+  const donos = termo ? nomes.filter(n => casaBusca(termo, n.nome)) : [];
+  const idsCavalos = new Set();
+  donos.forEach(d => d.cavalos.forEach(id => idsCavalos.add(id)));
+
+  const lista = S.cavalos
+    .filter(c => idsCavalos.has(c.id) && !c.ancestral)
+    .filter(c => !ciclo || ciclosCompetidos(c.id).includes(String(ciclo)))
+    .map(c => {
+      const res = S.resultados.filter(x => {
+        const ins = porId(S.inscricoes, x.inscricaoId);
+        return ins && ins.cavaloId === c.id && x.origem !== 'final'
+          && (!ciclo || x.ciclo === ciclo);
+      });
+      const notas = res.map(x => x.media).filter(v => v != null);
+      const pontos = Math.min(12, res.reduce((a, x) => a + (x.pontos || 0), 0));
+      return {
+        cavalo: c, provas: res.length, pontos,
+        melhor: notas.length ? Math.max(...notas) : null,
+        ciclos: ciclosCompetidos(c.id),
+        ginetes: Array.from(new Set(res.map(x => nomeGinete((porId(S.inscricoes, x.inscricaoId) || {}).gineteId)).filter(Boolean)))
+      };
+    })
+    .sort((a, b) => (b.melhor || 0) - (a.melhor || 0) || a.cavalo.nome.localeCompare(b.cavalo.nome, 'pt-BR'));
+
+  const totalHab = lista.filter(x => x.pontos >= 12).length;
+
+  el.innerHTML = `
+  <div class="cab-pagina"><div class="ol">Início / Meus cavalos</div>
+    <h1>Meus cavalos</h1>
+    <p>Digite o nome do proprietário como está no registro do animal. A consulta é aberta, sem cadastro.</p></div>
+
+  <div class="card">
+    <div class="busca">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="bDono" type="search" autocomplete="off" value="${esc(termo)}"
+             placeholder="Nome do proprietário…" aria-label="Nome do proprietário">
+      <button class="busca-limpa" id="bDonoLimpa" type="button" title="Limpar" ${termo ? '' : 'hidden'}>×</button>
+    </div>
+    <div class="busca-conta" id="bDonoConta" hidden></div>
+    <div id="donoSugestoes" class="mt-sm"></div>
+    <div class="chips mt-sm">
+      <a class="chip ${!ciclo ? 'on' : ''}" href="#/meus-cavalos${termo ? '?proprietario=' + encodeURIComponent(termo) : ''}">Todos os ciclos</a>
+      ${ciclosDisponiveis().map(c => `<a class="chip ${ciclo === c.id ? 'on' : ''}"
+        href="#/meus-cavalos?${termo ? 'proprietario=' + encodeURIComponent(termo) + '&' : ''}ciclo=${esc(c.id)}">${esc(c.nome.replace('Ciclo ', ''))}</a>`).join('')}
+    </div>
+  </div>
+
+  <div id="donoResultado">${corpoMeusCavalos(lista, donos, termo, nomes, totalHab)}</div>`;
+
+  ligarBuscaDono(nomes, termo, ciclo);
+}
+
+/* ---------- corpo do resultado (também usado ao vivo enquanto digita) ---------- */
+function corpoMeusCavalos(lista, donos, termo, nomes, totalHab) {
+  if (!termo) {
+    const amostra = nomes.slice(0, 12);
+    return `<div class="card"><div class="vazio-mini">
+        <b>Digite o nome do proprietário</b>
+        <span>ou escolha um nome abaixo</span></div>
+      ${amostra.length ? `<div class="chips mt">
+        ${amostra.map(n => `<a class="chip" href="#/meus-cavalos?proprietario=${encodeURIComponent(n.nome)}">${esc(n.nome)}</a>`).join('')}
+      </div>` : `<p class="pequeno fraco mt">O acervo ainda não tem proprietário cadastrado nos animais.
+        O nome entra pela ficha do animal, no cadastro do cavalo.</p>`}
+    </div>`;
+  }
+
+  if (!lista.length) {
+    return `<div class="card"><div class="aviso aviso-atencao">
+      <b>Nenhum cavalo encontrado para “${esc(termo)}”.</b>
+      <div class="mini mt-sm">A busca olha o campo <b>proprietário</b> do cadastro do animal.
+      Se o nome estiver grafado de outro jeito, tente só o primeiro ou o último nome.</div>
+      <div class="linha mt-sm">
+        <a class="btn sec sm" href="#/cavalos?q=${encodeURIComponent(termo)}">Buscar cavalo por nome</a>
+      </div>
+    </div></div>`;
+  }
+
+  const donosDoTermo = Array.from(new Set(lista.map(x => ''))).length; /* reservado */
+  return `
+  <div class="grid g-kpi mb">
+    ${kpi(lista.length, lista.length === 1 ? 'Cavalo' : 'Cavalos', 'no plantel')}
+    ${kpi(totalHab, 'Habilitados', 'com 12 pontos')}
+    ${kpi(lista.filter(x => x.melhor != null).length ? num(Math.max(...lista.filter(x => x.melhor != null).map(x => x.melhor)), 3) : '—', 'Melhor nota', 'entre os animais')}
+    ${kpi(lista.reduce((a, x) => a + x.provas, 0), 'Apresentações', 'com resultado')}
+  </div>
+  ${lista.map(x => {
+    const c = x.cavalo;
+    return `<div class="card">
+      <div class="linha entre" style="align-items:baseline">
+        <a href="#/cavalo/${c.id}" class="forte">${esc(c.nome)}</a>
+        ${x.pontos >= 12 ? selo('conferido', 'habilitado') : ''}
+      </div>
+      <div class="mini fraco mt-sm">
+        ${[c.registro, c.pelagem, c.nascimento ? String(c.nascimento).slice(0, 4) : '',
+           c.criador ? 'criador ' + c.criador : ''].filter(Boolean).map(esc).join(' · ')}
+      </div>
+      <div class="linha entre mt-sm" style="align-items:baseline">
+        <span class="mini">${x.provas} apresentaç${x.provas === 1 ? 'ão' : 'ões'} · ${x.pontos} ponto${x.pontos === 1 ? '' : 's'}${
+          x.melhor != null ? ' · melhor nota <b>' + num(x.melhor, 3) + '</b>' : ''}</span>
+        <span class="mini fraco">${x.ciclos.length ? 'ciclo ' + x.ciclos.join(', ') : 'sem ciclo'}</span>
+      </div>
+      ${x.ginetes.length ? `<div class="mini fraco mt-sm">ginete: ${x.ginetes.map(esc).join(', ')}</div>` : ''}
+    </div>`;
+  }).join('')}`;
+}
+
+/* ---------- busca ao vivo pelo nome do dono ---------- */
+function ligarBuscaDono(nomes, termoInicial, ciclo) {
+  const campo = $('#bDono');
+  if (!campo) return;
+
+  /* lê o campo no momento de desenhar: passar o texto por parâmetro
+     deixava a tela mostrando o estado anterior quando o evento chegava
+     fora de ordem (bug visto no teste: digitava e a lista não mudava). */
+  const desenhar = () => {
+    const campoAtual = $('#bDono');
+    const t = campoAtual ? campoAtual.value : TERMO_DONO;
+    TERMO_DONO = t;
+    const area = $('#donoResultado');
+    const sug = $('#donoSugestoes');
+    if (!area) return;
+    const alvo = norm(t);
+    const donos = alvo ? nomes.filter(n => casaBusca(t, n.nome)) : [];
+    const ids = new Set();
+    donos.forEach(d => d.cavalos.forEach(id => ids.add(id)));
+    const lista = S.cavalos.filter(c => ids.has(c.id) && !c.ancestral)
+      .filter(c => !ciclo || ciclosCompetidos(c.id).includes(String(ciclo)))
+      .map(c => {
+        const res = S.resultados.filter(x => {
+          const ins = porId(S.inscricoes, x.inscricaoId);
+          return ins && ins.cavaloId === c.id && x.origem !== 'final' && (!ciclo || x.ciclo === ciclo);
+        });
+        const notas = res.map(x => x.media).filter(v => v != null);
+        return {
+          cavalo: c, provas: res.length,
+          pontos: Math.min(12, res.reduce((a, x) => a + (x.pontos || 0), 0)),
+          melhor: notas.length ? Math.max(...notas) : null,
+          ciclos: ciclosCompetidos(c.id),
+          ginetes: Array.from(new Set(res.map(x => nomeGinete((porId(S.inscricoes, x.inscricaoId) || {}).gineteId)).filter(Boolean)))
+        };
+      })
+      .sort((a, b) => (b.melhor || 0) - (a.melhor || 0));
+
+    const conta = $('#bDonoConta');
+    if (conta) {
+      conta.hidden = !alvo;
+      conta.textContent = alvo
+        ? `${lista.length} ${lista.length === 1 ? 'cavalo' : 'cavalos'}` : '';
+    }
+    if (sug) {
+      sug.innerHTML = (alvo && donos.length > 1)
+        ? `<div class="mini fraco">${donos.length} proprietários casam com “${esc(t)}”: ${
+            donos.slice(0, 6).map(d => esc(d.nome)).join(' · ')}${donos.length > 6 ? ' …' : ''}</div>`
+        : '';
+    }
+    area.innerHTML = corpoMeusCavalos(lista, donos, t.trim(), nomes, lista.filter(x => x.pontos >= 12).length);
+    const limpa = $('#bDonoLimpa');
+    if (limpa) limpa.hidden = !t;
+  };
+
+  let timer = null;
+  campo.oninput = () => { clearTimeout(timer); timer = setTimeout(desenhar, 140); };
+  campo.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); desenhar(); }
+    if (ev.key === 'Escape') { campo.value = ''; desenhar(); }
+  };
+
+  const limpa = $('#bDonoLimpa');
+  if (limpa) limpa.onclick = () => { campo.value = ''; desenhar(); campo.focus(); };
+
+  desenhar();
+}
+
+/* ---------- quem é proprietário no acervo ----------
+   Junta o campo do cadastro do animal e o nome do expositor do evento.
+   A grafia é unificada por pessoa (mesmaPessoa), senão "JOÃO" e "JOAO"
+   viravam dois donos e cada um via só metade do plantel. */
+function proprietariosConhecidos() {
+  const bruto = [];
+  S.cavalos.filter(c => !c.ancestral).forEach(c => {
+    const dono = (c.proprietario || '').trim();
+    if (dono) bruto.push({ nome: dono, cavaloId: c.id });
+    /* o catálogo da Final traz o EXPOSITOR, que é quem apresenta o animal.
+       Para o proprietário é a mesma pergunta, então entra como fonte. */
+    const exp = (c.expositor || '').trim();
+    if (exp) bruto.push({ nome: exp, cavaloId: c.id });
+  });
+
+  const mapa = [];
+  bruto.forEach(x => {
+    const achado = mapa.find(m => mesmaPessoa(m.nome, x.nome));
+    if (achado) {
+      achado.cavalos.add(x.cavaloId);
+      achado.variantes.add(x.nome);
+    } else {
+      mapa.push({ nome: x.nome, cavalos: new Set([x.cavaloId]), variantes: new Set([x.nome]) });
+    }
+  });
+  return mapa
+    .map(m => ({ nome: m.nome, cavalos: Array.from(m.cavalos) }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+
+/* =====================================================================
+   CREDENCIADORAS — agenda pública (o núcleo não existia no site).
+
+   Antes só apareciam três linhas no topo da tela de Provas e o resto vivia
+   no admin. Quem é de fora pergunta justamente "onde vai ter prova perto de
+   mim, e quando?" — esta página responde, e o botão leva a agenda para o
+   Google Agenda / calendário do celular (.ics), sem instalar nada.
+   ===================================================================== */
+
+function pgCredenciadoras(el, r) {
+  const ciclo = r.params.ciclo || S.cicloAtivo;
+  const busca = (r.params.q || '').trim();
+  const hoje = hojeISO();
+
+  /* Agenda oficial (calendário ABCCC) + provas já cadastradas no portal.
+     As duas listas são o mesmo assunto para quem lê o site. */
+  const agenda = (S.calendario || [])
+    .filter(x => !ciclo || String(x.ciclo) === String(ciclo))
+    .map(x => ({ ...x, fonte: 'calendario' }));
+
+  const provas = (S.eventos || [])
+    .filter(e => e.tipo === 'credenciadora' && e.dataInicio)
+    .filter(e => !ciclo || String(e.ciclo || '') === String(ciclo))
+    .map(e => ({
+      id: e.id, cidade: e.cidade || e.local || '', uf: e.uf || '',
+      data: e.dataInicio, dataBR: dataBR(e.dataInicio),
+      nome: e.nome, eventoId: e.id, fonte: 'evento', nucleoId: e.nucleoId
+    }));
+
+  /* une as duas, sem duplicar a mesma cidade+data */
+  const vistos = new Set();
+  const todos = [...provas, ...agenda]
+    .filter(x => {
+      const chave = norm((x.cidade || '') + '|' + (x.data || ''));
+      if (vistos.has(chave)) return false;
+      vistos.add(chave);
+      return true;
+    })
+    .filter(x => !busca || casaBusca(busca, [x.cidade, x.uf, x.nome].filter(Boolean).join(' ')))
+    .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
+
+  const futuras = todos.filter(x => String(x.data) >= hoje);
+  const passadas = todos.filter(x => String(x.data) < hoje).reverse();
+  const proxima = futuras[0];
+
+  const cidades = Array.from(new Set(todos.map(x => x.cidade).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const ciclos = Array.from(new Set([...(S.calendario || []).map(x => String(x.ciclo)),
+    ...(S.eventos || []).filter(e => e.tipo === 'credenciadora').map(e => String(e.ciclo || ''))].filter(Boolean)))
+    .sort((a, b) => b.localeCompare(a));
+
+  el.innerHTML = `
+  <div class="cab-pagina"><div class="ol">Início / Credenciadoras</div>
+    <h1>Credenciadoras</h1>
+    <p>Onde há prova do Freio do Proprietário e quando. Leve a agenda para o seu calendário.</p></div>
+
+  <div class="card">
+    <div class="busca">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16.5 16.5 21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="bCred" type="search" autocomplete="off" value="${esc(busca)}"
+             placeholder="Cidade ou estado…" aria-label="Buscar credenciadora">
+      <button class="busca-limpa" id="bCredLimpa" type="button" title="Limpar" ${busca ? '' : 'hidden'}>×</button>
+    </div>
+    <div class="chips mt-sm">
+      ${ciclos.map(c => `<a class="chip ${String(ciclo) === c ? 'on' : ''}" href="#/credenciadoras?ciclo=${esc(c)}">${esc(c)}</a>`).join('')}
+    </div>
+    ${cidades.length ? `<div class="chips mt-sm">
+      ${cidades.slice(0, 10).map(cd => `<a class="chip" href="#/credenciadoras?${ciclo ? 'ciclo=' + encodeURIComponent(ciclo) + '&' : ''}q=${encodeURIComponent(cd)}">${esc(cd)}</a>`).join('')}
+    </div>` : ''}
+  </div>
+
+  <div id="credArea">${corpoCredenciadoras({ proxima, futuras, passadas, total: todos.length, ciclo })}</div>
+
+  <div class="card">
+    <h3>Levar para o calendário</h3>
+    <p class="pequeno fraco">O arquivo abre no Google Agenda, no Outlook e no calendário do iPhone e do Android
+      com as provas futuras já cadastradas. Depois é só sincronizar.</p>
+    <button class="btn sec" onclick="baixarAgendaICS('${esc(ciclo || '')}')">Baixar agenda (.ics)</button>
+  </div>`;
+
+  ligarBuscaCredenciadoras(ciclo, busca);
+}
+
+function corpoCredenciadoras(d) {
+  const { proxima, futuras, passadas, total } = d;
+
+  if (!total) {
+    return `<div class="card"><div class="vazio-mini">
+      <b>Nenhuma credenciadora cadastrada${d.ciclo ? ' no ciclo ' + esc(d.ciclo) : ''}.</b>
+      <span>a agenda entra pelo cadastro de credenciadoras</span></div></div>`;
+  }
+
+  const item = (x, destaque) => {
+    const nomeEv = x.nome && x.fonte === 'evento' ? x.nome : '';
+    return `<div class="cred-item${destaque ? ' destaque' : ''}">
+      <div class="cred-data">
+        <b>${esc(String(x.dataBR || dataBR(x.data)).slice(0, 5))}</b>
+        <span>${esc(String(x.data || '').slice(0, 4))}</span>
+      </div>
+      <div class="cred-txt">
+        <div class="cred-cidade">${esc(x.cidade || 'Local a confirmar')}${x.uf ? ' · ' + esc(x.uf) : ''}</div>
+        ${nomeEv ? `<div class="mini fraco">${esc(nomeEv)}</div>` : ''}
+      </div>
+      ${x.eventoId ? `<a class="btn sec sm" href="#/prova/${esc(x.eventoId)}">Ver a prova</a>` : ''}
+    </div>`;
+  };
+
+  return `
+  ${proxima ? `<div class="card">
+    <div class="linha entre"><h2>Próxima prova</h2>${selo('conferido', 'confirmada')}</div>
+    ${item(proxima, true)}
+    <div class="mini fraco mt-sm">${diasAte(proxima.data)}</div>
+  </div>` : ''}
+  ${futuras.length > (proxima ? 1 : 0) ? `<div class="card">
+    <h2>Calendário${proxima ? ' — próximas' : ''}</h2>
+    <div class="cred-lista">${futuras.filter(x => x !== proxima).map(x => item(x)).join('')}</div>
+  </div>` : ''}
+  ${passadas.length ? `<div class="card">
+    <h2>Já realizadas</h2>
+    <div class="cred-lista">${passadas.slice(0, 20).map(x => item(x)).join('')}</div>
+    ${passadas.length > 20 ? `<p class="mini fraco mt-sm">Mostrando as 20 mais recentes de ${passadas.length}.</p>` : ''}
+  </div>` : ''}`;
+}
+
+function diasAte(data) {
+  if (!data) return '';
+  const alvo = new Date(String(data) + 'T00:00:00');
+  const hoje = new Date(hojeISO() + 'T00:00:00');
+  const dias = Math.round((alvo - hoje) / 86400000);
+  if (dias === 0) return 'É hoje.';
+  if (dias === 1) return 'Amanhã.';
+  if (dias < 0) return `Há ${Math.abs(dias)} dias.`;
+  return `Em ${dias} dias.`;
+}
+
+function ligarBuscaCredenciadoras(ciclo, inicial) {
+  const campo = $('#bCred');
+  if (!campo) return;
+  let t = null;
+
+  const desenhar = (termo) => {
+    const area = $('#credArea');
+    if (!area) return;
+    const hoje = hojeISO();
+    const d = S.calendario && S.calendario.length !== undefined ? S : null; /* guarda */
+    /* recalcula a lista do mesmo jeito que a página montou, com o termo */
+    const provas = (S.eventos || []).filter(e => e.tipo === 'credenciadora' && e.dataInicio)
+      .filter(e => !ciclo || String(e.ciclo || '') === String(ciclo))
+      .map(e => ({ id: e.id, cidade: e.cidade || e.local || '', uf: e.uf || '', data: e.dataInicio,
+        dataBR: dataBR(e.dataInicio), nome: e.nome, eventoId: e.id, fonte: 'evento' }));
+    const agenda = (S.calendario || []).filter(x => !ciclo || String(x.ciclo) === String(ciclo))
+      .map(x => ({ ...x, fonte: 'calendario' }));
+    const vistos = new Set();
+    const todos = [...provas, ...agenda]
+      .filter(x => {
+        const k = norm((x.cidade || '') + '|' + (x.data || ''));
+        if (vistos.has(k)) return false;
+        vistos.add(k); return true;
+      })
+      .filter(x => !termo || casaBusca(termo, [x.cidade, x.uf, x.nome].filter(Boolean).join(' ')))
+      .sort((a, b) => String(a.data || '').localeCompare(String(b.data || '')));
+
+    area.innerHTML = corpoCredenciadoras({
+      proxima: todos.filter(x => String(x.data) >= hoje)[0],
+      futuras: todos.filter(x => String(x.data) >= hoje),
+      passadas: todos.filter(x => String(x.data) < hoje).reverse(),
+      total: todos.length, ciclo
+    });
+
+    const conta = null;
+    const limpa = $('#bCredLimpa');
+    if (limpa) limpa.hidden = !termo;
+  };
+
+  campo.oninput = () => {
+    clearTimeout(t);
+    const v = campo.value;
+    t = setTimeout(() => desenhar(v.trim()), 140);
+  };
+  campo.onkeydown = (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); desenhar(campo.value.trim()); }
+    if (ev.key === 'Escape') { campo.value = ''; desenhar(''); }
+  };
+  const limpa = $('#bCredLimpa');
+  if (limpa) limpa.onclick = () => { campo.value = ''; desenhar(''); campo.focus(); };
+}
+
+/* ---------- agenda .ics ----------
+   Arquivo de texto padrão iCalendar. Não depende de servidor nem de
+   biblioteca: o navegador monta e baixa. */
+function baixarAgendaICS(ciclo) {
+  const hoje = hojeISO();
+  const linhas = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Portal Freio do Proprietario//AGENDA//PT-BR',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'X-WR-CALNAME:Credenciadoras — Freio do Proprietário',
+    'X-WR-TIMEZONE:America/Sao_Paulo'
+  ];
+
+  const provas = (S.eventos || []).filter(e => e.tipo === 'credenciadora' && e.dataInicio)
+    .filter(e => !ciclo || String(e.ciclo || '') === String(ciclo))
+    .map(e => ({ cidade: e.cidade || e.local || '', uf: e.uf || '', data: e.dataInicio,
+      nome: e.nome, id: e.id }));
+  const agenda = (S.calendario || []).filter(x => !ciclo || String(x.ciclo) === String(ciclo))
+    .filter(x => x.data)
+    .map(x => ({ cidade: x.cidade || '', uf: '', data: x.data, nome: '', id: x.id }));
+
+  const vistos = new Set();
+  const todos = [...provas, ...agenda].filter(x => {
+    const k = norm((x.cidade || '') + '|' + x.data);
+    if (vistos.has(k)) return false;
+    vistos.add(k);
+    return String(x.data) >= hoje;
+  }).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+
+  const limpa = (s) => String(s || '').replace(/[\\;,]/g, (m) => '\\' + m).replace(/\n/g, '\\n');
+
+  todos.forEach((x, i) => {
+    const d = String(x.data).replace(/-/g, '');
+    const titulo = 'Freio do Proprietário — ' + (x.cidade || 'prova') + (x.uf ? '/' + x.uf : '');
+    linhas.push(
+      'BEGIN:VEVENT',
+      `UID:cred-${d}-${i}@proprietario.net`,
+      `DTSTAMP:${hoje.replace(/-/g, '')}T120000Z`,
+      // prova ocupa o dia inteiro: DTEND é o dia seguinte no formato DATE
+      `DTSTART;VALUE=DATE:${d}`,
+      `DTEND;VALUE=DATE:${somaDia(x.data).replace(/-/g, '')}`,
+      `SUMMARY:${limpa(titulo)}`,
+      `LOCATION:${limpa(x.cidade)}`,
+      `DESCRIPTION:${limpa('Credenciadora do Freio do Proprietário. Confirme a data no site da ABCCC.')}`,
+      'END:VEVENT'
+    );
+  });
+  linhas.push('END:VCALENDAR');
+
+  const texto = linhas.join('\r\n') + '\r\n';
+  const blob = new Blob([texto], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'credenciadoras-freio' + (ciclo ? '-' + ciclo : '') + '.ics';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  toast(`${todos.length} prova${todos.length === 1 ? '' : 's'} na agenda.`);
+}
+
+function somaDia(iso) {
+  const d = new Date(String(iso) + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
 
 /* ÁREA DO USUÁRIO OCULTA (decisão de 08/11: só acesso geral e administrativo).
@@ -10037,6 +10593,129 @@ function pgSobre(el) {
         <li><b>Integração ABCCC</b>: nenhuma, por falta de autorização de uso.</li>
       </ul>
     </div>
+  </div>`;
+}
+
+
+/* =====================================================================
+   COMO FUNCIONA — porta de entrada para quem nunca viu a modalidade.
+
+   O site abria direto no ranking, que só faz sentido para quem já conhece
+   Freio do Proprietário. Quem chega de fora (um comprador de cavalo, um
+   jornalista, um parente do ginete) precisa primeiro entender o que está
+   vendo: o que é o conjunto, o que são as etapas, como se soma o ponto e
+   por que 12 habilita.
+
+   As regras aqui são as do Regulamento 2027 (PDF oficial da ABCCC), as
+   mesmas que o motor de cálculo usa. Nada de número inventado.
+   ===================================================================== */
+
+function pgComoFunciona(el) {
+  const etapasA = (typeof ETAPAS_A !== 'undefined' ? ETAPAS_A : []);
+  const etapasB = (typeof ETAPAS_B !== 'undefined' ? ETAPAS_B : []);
+
+  const linhaEtapa = (e, i) => `<div class="cf-etapa">
+    <b>${i + 1}. ${esc(e.nome)}</b>
+    <span>${esc(e.fase || '')}</span>
+    <i>até ${esc(String(e.maxNota))}</i>
+  </div>`;
+
+  el.innerHTML = `
+  <div class="cab-pagina"><div class="ol">Início / Como funciona</div>
+    <h1>Como funciona o Freio do Proprietário</h1>
+    <p>O que é o conjunto, o que são as etapas e como se chega à nota e à habilitação.
+      Regras do Regulamento oficial da ABCCC.</p></div>
+
+  <div class="card">
+    <h2>O conjunto</h2>
+    <p class="pequeno">Quem compete não é o cavalo sozinho nem o ginete sozinho: é o <b>conjunto</b> —
+      um ginete e um cavalo juntos, dentro de uma <b>categoria</b>. O mesmo cavalo pode formar
+      conjunto com ginetes diferentes em provas diferentes.</p>
+    <p class="pequeno fraco mt-sm">A pontuação é do <b>animal</b> (Art. 10): quando o cavalo muda de ginete,
+      os pontos seguem com o cavalo. É por isso que a ficha do cavalo mostra todo o histórico dele.</p>
+  </div>
+
+  <div class="card">
+    <h2>As categorias</h2>
+    <p class="pequeno fraco">A categoria é definida pela idade do ginete. A divisão em A e B muda
+      o número de etapas julgadas.</p>
+    ${tabela([
+      { titulo: 'Categoria', render: c => `<b>${esc(c.nome)}</b>` },
+      { titulo: 'Idade', render: c => esc(c.idade || '—') },
+      { titulo: 'Etapas', render: c => (String(c.grupo) === 'B' ? 6 : 8) + ' etapas' }
+    ], CATEGORIAS)}
+  </div>
+
+  <div class="card">
+    <h2>As etapas e as notas</h2>
+    <p class="pequeno fraco">Cada etapa tem um teto de nota. As categorias A passam por 8 etapas e
+      as B por 6 — as B não têm etapa de Campo (Art. 11, IV).</p>
+    <div class="grid g2 mt">
+      <div>
+        <h3>Categorias A — 8 etapas</h3>
+        ${etapasA.map(linhaEtapa).join('')}
+      </div>
+      <div>
+        <h3>Categorias B — 6 etapas</h3>
+        ${etapasB.map(linhaEtapa).join('')}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>A nota da prova</h2>
+    <p class="pequeno">A nota final de uma apresentação é a <b>média das médias de cada etapa</b>:
+      soma-se a média obtida em cada etapa e divide-se pelo número de etapas da categoria.
+      Uma prova de categoria A soma 8 médias e divide por 8; uma de categoria B soma 6 e divide por 6.</p>
+    <p class="pequeno fraco mt-sm">É por isso que trocar a categoria de uma inscrição já lançada
+      muda a média: as etapas que não existem no novo grupo são descartadas.</p>
+  </div>
+
+  <div class="card">
+    <h2>Os pontos e a habilitação</h2>
+    <div class="cf-passo">
+      <div class="cf-num">1</div>
+      <div class="cf-txt"><b>Cada prova vale pontos</b>
+        <p>A colocação na prova de credenciadora vale pontos, conforme a tabela do regulamento.</p></div>
+    </div>
+    <div class="cf-passo">
+      <div class="cf-num">2</div>
+      <div class="cf-txt"><b>O cavalo soma os pontos do ciclo</b>
+        <p>Os pontos das provas do mesmo ciclo são somados para o animal, dentro da categoria.</p></div>
+    </div>
+    <div class="cf-passo">
+      <div class="cf-num">3</div>
+      <div class="cf-txt"><b>12 pontos habilita</b>
+        <p>O conjunto que chega a 12 pontos fica habilitado (Art. 15, §1º). O portal mostra
+          "habilitado" quando a soma alcança esse teto.</p></div>
+    </div>
+    <div class="cf-passo">
+      <div class="cf-num">4</div>
+      <div class="cf-txt"><b>A melhor nota desempata</b>
+        <p>Dentro do mesmo número de pontos, vale a <b>maior média</b> obtida pelo animal entre
+          todas as credenciadoras de que participou (Art. 10, §2º).</p></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>O que é a Final</h2>
+    <p class="pequeno">A Final é uma prova à parte: reúne os melhores conjuntos do ciclo e
+      <b>não entra na soma de pontos</b> das credenciadoras. Por isso o portal mantém a aba
+      Final separada do ranking do ciclo — juntar as duas somaria pontos de final ao total,
+      o que o regulamento não manda fazer.</p>
+    <div class="linha mt">
+      <a class="btn sec sm" href="#/final">Ver a Final</a>
+      <a class="btn sec sm" href="#/rankings">Ver os rankings</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>De onde vêm os números</h2>
+    <p class="pequeno">Os dados vêm dos documentos oficiais publicados pela ABCCC: os rankings por
+      ciclo, o catálogo e as súmulas da Final. O portal não recalcula posição publicada —
+      preserva a colocação do documento.</p>
+    <div class="aviso aviso-info mt-sm">Este é um portal informativo. Os dados com fé pública são os
+      publicados pela Associação no site oficial.</div>
   </div>`;
 }
 
