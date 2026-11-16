@@ -1914,6 +1914,14 @@ nav.menu::-webkit-scrollbar{display:none}
 nav.menu a{color:rgba(255,255,255,.82);padding:8px 10px;border-radius:8px;font-size:13.5px;white-space:nowrap}
 nav.menu a:hover{background:rgba(255,255,255,.1);text-decoration:none;color:#fff}
 nav.menu a.on{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
+/* Login dentro do menu: mesmo peso visual dos links, com uma borda discreta
+   para não competir com a navegação e continuar fácil de achar. */
+nav.menu .mn-login{border:1px solid rgba(255,255,255,.34);margin-left:6px;
+  background:rgba(255,255,255,.07);font-weight:600}
+nav.menu .mn-login:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.5)}
+nav.menu button.mn-login{font:inherit;font-size:13.5px;cursor:pointer;color:rgba(255,255,255,.86);
+  padding:8px 10px;border-radius:8px;white-space:nowrap;font-family:inherit}
+@media (max-width:520px){ nav.menu .mn-login{margin-left:0} }
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:10px;
   padding:9px 14px;font-size:14px;font-weight:600;cursor:pointer;background:var(--couro);color:#fff;transition:.15s}
 .btn:hover{filter:brightness(1.07);text-decoration:none}
@@ -1934,7 +1942,6 @@ nav.menu a.on{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
   .acoes-linha .btn{padding:6px 8px;font-size:12px}
   .acoes-linha .btn+.btn{margin-left:4px}
 }
-.btn-topo{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff;padding:8px 10px;font-size:13.5px;flex:0 0 auto;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 
 /* ================= CAPA (só na página inicial) ================= */
@@ -2289,8 +2296,6 @@ footer.rodape p{margin:.3em 0;line-height:1.5}
   .marca small{display:none}
   .topo-in{gap:7px}
   .btn-menu{padding:7px 9px;font-size:13px}
-  .btn-topo{font-size:12px;padding:7px 8px;max-width:none}
-  .btn-topo .rot-longo{display:none}
   .kpi{padding:11px}
   .card{padding:13px}
   table.tabela{font-size:13px}
@@ -2796,11 +2801,22 @@ function topoHTML(rota) {
     <nav class="menu" id="menuPrincipal" aria-label="Menu principal">
       ${MENU.map(([id, rot]) => `<a href="#/${id}" class="${rota === id ? 'on' : ''}">${rot}</a>`).join('')}
       ${Motor.ehAdmin() ? `<a href="#/admin" class="${rota.startsWith('admin') ? 'on' : ''}">Administração</a>` : ''}
+      ${logado
+        ? `<a href="#/minha-area" class="${rota === 'minha-area' ? 'on' : ''}">Minha área</a>
+           <button type="button" class="mn-login" onclick="fecharMenuTopo();sair()"
+              title="Sair da conta de ${esc(SESSAO.nome || '')}">Sair (${esc((SESSAO.nome || '').split(' ')[0])})</button>`
+        : `<a href="#/entrar" class="mn-login ${rota === 'entrar' ? 'on' : ''}"
+              onclick="fecharMenuTopo()">Login</a>`}
     </nav>
-    ${logado
-      ? `<button class="btn btn-topo" onclick="sair()" title="Encerrar sessão"><span class="rot-longo">Sair </span>(${esc((SESSAO.nome || '').split(' ')[0])})</button>`
-      : `<a class="btn btn-topo" href="#/entrar">Entrar</a>`}
   </div></header>`;
+}
+
+/* fecha o menu do topo depois de um clique (login/sair) */
+function fecharMenuTopo() {
+  const m = $('#menuPrincipal');
+  if (m) m.classList.remove('aberto');
+  const b = $('#btnMenu');
+  if (b) b.setAttribute('aria-expanded', 'false');
 }
 
 /* ---------- roteador ---------- */
@@ -3046,7 +3062,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)}${dataCarga() ? ' · dados de ' + dataCarga() : ''}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-15 22:15 · 7903b44</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-15 22:26 · 7b59c63</p>
       </div>
     </div>
   </div></footer>`;
