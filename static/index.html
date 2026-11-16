@@ -2005,10 +2005,10 @@ nav.menu button.mn-login{font:inherit;font-size:13.5px;cursor:pointer;color:rgba
   flex:0 0 auto;display:grid;place-items:center;border-radius:50%;background:#fbf8f2;
   border:1px solid var(--linha);font-variant-numeric:tabular-nums}
 .rk .p.primeiro{background:var(--azul);border-color:var(--azul);color:#fff}
-.rk .quem{min-width:0;flex:1}
-.rk .quem b{display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;letter-spacing:-.005em}
-.rk .quem span{display:block;font-size:11px;color:var(--texto-fraco);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rk .quem{min-width:0;flex:1 1 auto;overflow:hidden}
+.rk .quem b{display:block;max-width:100%;font-size:13px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;letter-spacing:-.005em}
+.rk .quem span{display:block;max-width:100%;font-size:11px;color:var(--texto-fraco);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rk .n{font-family:Georgia,serif;font-size:14.5px;font-weight:700;color:var(--azul);flex:0 0 auto;
   font-variant-numeric:tabular-nums;letter-spacing:-.015em}
 
@@ -2021,6 +2021,20 @@ nav.menu button.mn-login{font:inherit;font-size:13.5px;cursor:pointer;color:rgba
 }
 
 /* ---------- layout ---------- */
+/* ---------- trava de largura ----------
+   Sintoma que o dono viu: "às vezes a página fica maior que a tela". A causa
+   é sempre a mesma — um texto longo (nome de cavalo, e-mail, URL) ou uma
+   tabela larga empurrando o conteúdo além da viewport, o que faz o navegador
+   do celular mostrar a página inteira reduzida e a barra do rodapé cortada.
+   Aqui a regra vale para TODOS os elementos, em vez de caçar caso a caso. */
+*, *::before, *::after{box-sizing:border-box}
+html, body{max-width:100%;overflow-x:hidden}
+img, svg, video, canvas{max-width:100%}
+/* caixa que precisa rolar (tabela, lista horizontal) rola dentro de si */
+.tabela-wrap, .ag-lista, .busca-viva, .nt-texto{max-width:100%}
+/* texto que não quebra (nome de animal, código) nunca alarga o pai */
+.rk .quem, .cc-nome, .cred-txt, .cartao-neg, .card, .kpi, .linha{min-width:0}
+
 main{padding:22px 0 60px;min-height:70vh}
 .cab-pagina{margin-bottom:18px}
 .cab-pagina .ol{font-size:12.5px;color:var(--texto-fraco);margin-bottom:6px}
@@ -2041,9 +2055,14 @@ main{padding:22px 0 60px;min-height:70vh}
 .forte{font-weight:700} .centro{text-align:center}
 
 /* KPI */
-.kpi{background:var(--papel);border:1px solid var(--linha);border-radius:12px;padding:13px 14px}
-.kpi .v{font-family:Georgia,serif;font-size:clamp(20px,3.4vw,26px);font-weight:700;color:var(--azul);line-height:1.15}
-.kpi .r{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--texto-fraco);margin-top:2px}
+.kpi{background:var(--papel);border:1px solid var(--linha);border-radius:12px;padding:13px 14px;
+  min-width:0;overflow-wrap:anywhere}
+.kpi .v{font-family:Georgia,serif;font-size:clamp(20px,3.4vw,26px);font-weight:700;color:var(--azul);
+  line-height:1.15;overflow-wrap:anywhere}
+/* rótulo e observação quebram em vez de vazar da caixa (KPI estreito em 320px) */
+.kpi .r{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--texto-fraco);
+  margin-top:2px;overflow-wrap:anywhere;hyphens:auto}
+.kpi .obs{font-size:11px;color:var(--texto-fraco);overflow-wrap:anywhere}
 .kpi .obs{font-size:11.5px;color:var(--texto-fraco);margin-top:6px;line-height:1.35}
 
 /* selos */
@@ -2196,12 +2215,6 @@ a.chip:hover{text-decoration:none;border-color:var(--couro)}
 @media(max-width:560px){.sb-lista{max-height:44vh}}
 
 /* Aviso de ciclo em andamento (home) */
-.aviso-ciclo{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;
-  background:#f3f7fb;border:1px solid #cfdcea;border-left:4px solid var(--azul);border-radius:10px;
-  padding:11px 14px;margin:14px 0;font-size:13.5px;color:#243b53}
-.aviso-ciclo b{color:var(--azul)}
-.aviso-ciclo a{font-weight:600;white-space:nowrap}
-@media(max-width:560px){.aviso-ciclo{font-size:13px;padding:10px 12px}}
 
 /* formulários */
 .form{display:grid;gap:12px}
@@ -2359,9 +2372,15 @@ footer.rodape p{margin:.3em 0;line-height:1.5}
 .tab-comp{display:flex;flex-direction:column;min-width:0}
 .tc-cab,.tc-linha{display:grid;grid-template-columns:minmax(0,1fr) repeat(5,44px) 52px;
   gap:6px;align-items:center;min-width:0}
-.tc-cab{padding:0 4px 8px;border-bottom:1px solid var(--linha);font:600 9.5px/1.3 -apple-system,sans-serif;
-  letter-spacing:.055em;text-transform:uppercase;color:var(--texto-fraco)}
+/* o cabeçalho é mais estreito que o corpo e a palavra não cabe em 44px:
+   reduz a fonte e deixa quebrar em vez de vazar da célula */
+.tc-cab{padding:0 4px 8px;border-bottom:1px solid var(--linha);
+  font:600 9px/1.2 -apple-system,sans-serif;
+  letter-spacing:.03em;text-transform:uppercase;color:var(--texto-fraco)}
+.tc-cab>span{min-width:0;overflow-wrap:anywhere;hyphens:auto}
 .tc-cab>span:not(:first-child){text-align:right}
+/* os números também não podem empurrar a grade */
+.tc-linha>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tc-linha{padding:9px 4px;border-bottom:1px solid var(--linha-2);color:inherit;transition:background .12s}
 .tc-linha:last-child{border-bottom:0}
 .tc-linha:hover{background:#fbf8f2;text-decoration:none}
@@ -2480,6 +2499,7 @@ footer.rodape p{margin:.3em 0;line-height:1.5}
 .faixa-ciclo .chips{margin:0}
 .fc-busca{flex:1;min-width:190px;max-width:330px;margin-left:auto}
 .fc-busca .busca-campo{height:38px}
+.faixa-info.faixa-fim{margin-top:6px;padding-top:14px;border-top:1px solid var(--linha-2)}
 .faixa-info{display:flex;gap:16px;flex-wrap:wrap;align-items:baseline;padding:10px 0 14px;
   border-bottom:1px solid var(--linha);margin-bottom:16px;font-size:12.5px;color:var(--texto-fraco);min-width:0}
 .faixa-info b{font-family:Georgia,serif;font-size:15px;color:var(--azul);font-weight:700;
@@ -2508,11 +2528,14 @@ table.tab-comp-final td .mini{margin-top:1px}
 .fl-notas{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--linha-2);
   border:1px solid var(--linha-2);border-radius:9px;overflow:hidden;margin-top:9px}
 .fl-notas>div{background:var(--papel);padding:7px 9px;min-width:0}
-.fl-notas span{display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:#9a9182}
+.fl-notas span{display:block;font-size:8.5px;letter-spacing:.03em;text-transform:uppercase;
+  color:#9a9182;overflow-wrap:anywhere;hyphens:auto}
 .fl-notas b{display:block;font-family:Georgia,serif;font-size:14px;font-weight:700;color:var(--texto);
   font-variant-numeric:tabular-nums;margin-top:1px}
 .fl-notas b.f{color:var(--azul)}
 @media(max-width:430px){
+  /* rótulo longo em célula de 1/3 da tela não cabe: duas colunas resolvem */
+  .fl-notas{grid-template-columns:repeat(2,1fr)}
   .faixa-info{gap:12px;font-size:11.5px}
   .faixa-info .fi-fonte{display:none}
   .fl-notas b{font-size:13px}
@@ -3069,7 +3092,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)}${dataCarga() ? ' · dados de ' + dataCarga() : ''}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-15 22:52 · 1975bec</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-15 23:54 · 1677183</p>
       </div>
     </div>
   </div></footer>`;
@@ -3176,26 +3199,6 @@ function pgInicio(el, r) {
       </div>
     </div>
   </div>
-  <div class="faixa-info">
-    <span><b>${num(conteudo.length)}</b> conjuntos</span>
-    <span><b>${num(hab)}</b> habilitados</span>
-    <span><b>${num(new Set(conteudo.map(l => l.cavaloId)).size)}</b> cavalos</span>
-    <span><b>${num(new Set(conteudo.map(l => l.gineteId)).size)}</b> ginetes</span>
-  </div>
-
-  ${(() => {
-    /* ciclo em andamento: só avisa quando o ranking ainda é parcial, para a
-       home não parecer vazia. Não inventa número — mostra o total real. */
-    const total = conteudo.length;
-    if (total > 40) return '';
-    const anterior = disp.filter(x => x.id !== cicloOk).sort((a, b) => b.id.localeCompare(a.id))[0];
-    const nAnt = anterior ? Motor.ranking({ ciclo: anterior.id }).linhas.length : 0;
-    return `<div class="aviso-ciclo">
-      <span><b>Ciclo ${esc(cicloOk)} em andamento</b> — ${num(total)} conjunto${total === 1 ? '' : 's'} publicado${total === 1 ? '' : 's'} até agora.</span>
-      ${anterior && nAnt ? `<a href="#/inicio?ciclo=${esc(anterior.id)}">Ver ciclo ${esc(anterior.id)} (${num(nAnt)}) →</a>` : ''}
-    </div>`;
-  })()}
-
   <div class="grid g-cat">
     ${CATEGORIAS.map(cat => {
       const ls = Motor.ranking({ ciclo: cicloOk, categoriaId: cat.id }).linhas || [];
@@ -3235,6 +3238,14 @@ function pgInicio(el, r) {
       <a class="btn sec sm" href="#/final">Final ${esc(cicloOk)}</a>
       <a class="btn sec sm" href="#/rankings?ciclo=${cicloOk}">Todos os rankings</a>
     </span>
+  </div>
+
+  <div class="faixa-info faixa-fim">
+    <span><b>${num(conteudo.length)}</b> conjuntos</span>
+    <span><b>${num(hab)}</b> habilitados</span>
+    <span><b>${num(new Set(conteudo.map(l => l.cavaloId)).size)}</b> cavalos</span>
+    <span><b>${num(new Set(conteudo.map(l => l.gineteId)).size)}</b> ginetes</span>
+    ${S.ciclos.filter(x => x.disponivel === false).length ? '' : ''}
   </div>`;
 
   const bu = $('#buscaUniversal');
