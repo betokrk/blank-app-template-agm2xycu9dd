@@ -570,6 +570,10 @@ async function carregarDadosDoServidor() {
       const soLocal = (S[col] || []).filter(x => x && x.id != null && !mapa.has(String(x.id)));
       S[col] = pacote[col].concat(soLocal);
     });
+      /* configuração vinda do banco: logo e menu inferior valem para todos */
+      if (pacote.config && typeof pacote.config === 'object') {
+        S.config = Object.assign({}, S.config || {}, pacote.config);
+      }
       /* exclusões gravadas no banco: junta com as deste navegador */
       const exc = pacote.exclusoes;
       if (exc && typeof EXCLUIDOS !== 'undefined') {
@@ -610,6 +614,9 @@ function sincronizarDados(imediato) {
     try {
       const colecoes = {};
       COLECOES_SINC.forEach(c => { if (Array.isArray(S[c])) colecoes[c] = S[c]; });
+      /* configuração do portal (logo, menu inferior) é objeto, não lista —
+         sem ela aqui o menu de 6 ícones ficaria só neste navegador */
+      if (S.config && typeof S.config === 'object') colecoes.config = S.config;
       /* exclusões viajam junto: sem isto a prova apagada voltaria ao abrir
          o portal em outro aparelho (ou depois de limpar o navegador) */
       if (typeof EXCLUIDOS !== 'undefined') colecoes.exclusoes = EXCLUIDOS;
@@ -2574,6 +2581,40 @@ table.tab-comp-final td .mini{margin-top:1px}
 .ag-selo{position:absolute;top:-7px;right:6px;font-size:7.5px;letter-spacing:.06em;text-transform:uppercase;
   background:var(--azul);color:#fff;border-radius:3px;padding:2px 4px}
 
+/* ---------- menu inferior fixo (6 ícones do painel) ----------
+   Fica preso no rodapé da viewport em qualquer tela pública. Em telas com
+   área segura (iPhone), respeita o recorte inferior. */
+.menu-baixo{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;
+  background:var(--papel);border-top:1px solid var(--linha);
+  box-shadow:0 -2px 12px rgba(20,42,68,.10);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  transform:translateZ(0);}
+.mb-item{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:3px;padding:7px 2px 6px;color:var(--texto-fraco);
+  text-decoration:none;border:0;background:none;position:relative;
+  -webkit-tap-highlight-color:transparent;transition:color .15s}
+.mb-item:active{background:rgba(20,42,68,.05)}
+.mb-item.on{color:var(--azul);font-weight:700}
+.mb-item.on::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:26px;height:2.5px;border-radius:0 0 3px 3px;background:var(--azul)}
+.mb-ico{display:flex;align-items:center;justify-content:center;height:22px}
+.mb-rot{font-size:9.5px;line-height:1.1;letter-spacing:.01em;max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* o rodapé do site precisa de folga para a barra não cobrir a última linha */
+body.com-menu-baixo .rodape{padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+body.com-menu-baixo main{padding-bottom:8px}
+@media (min-width:900px){
+  .menu-baixo{display:none}
+  body.com-menu-baixo .rodape{padding-bottom:0}
+}
+@media print{ .menu-baixo{display:none} }
+
+/* prévia da barra dentro do painel: mostra a barra real, sem position fixed */
+.previa-menu{background:var(--papel);border:1px solid var(--linha);border-radius:10px;
+  overflow:hidden;padding-bottom:0}
+.previa-menu .menu-baixo{position:static;box-shadow:none;border-radius:0;display:flex !important;
+  transform:none;padding-bottom:0}
+
 /* ---------- credenciadoras (página pública) ---------- */
 .cred-lista{display:flex;flex-direction:column;gap:0;min-width:0}
 .cred-item{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--linha-2);min-width:0}
@@ -2907,6 +2948,15 @@ function render() {
     }
   });
   linksDeVerdade(app);
+  /* barra fixa do rodapé: acompanha a troca de página e marca a aba atual */
+  if (!ehAdminPg && typeof montarMenuInferior === 'function') montarMenuInferior(r.aba);
+  else if (ehAdminPg) {
+    /* no painel a barra pública sai (ela não deve cobrir o formulário), mas
+       só a que está solta no body: a PRÉVIA dentro do card continua. */
+    const nb = document.body.querySelector(':scope > .menu-baixo');
+    if (nb) nb.remove();
+    document.body.classList.remove('com-menu-baixo');
+  }
   window.scrollTo(0, 0);
 }
 
@@ -2996,7 +3046,7 @@ function rodapeHTML() {
         <h4>Privacidade</h4>
         <p>Contato de anunciante protegido. Dados pessoais mínimos. Política de correção e exclusão na área do usuário.</p>
         <p class="mini">Ciclo ${esc(S.cicloAtivo)}${dataCarga() ? ' · dados de ' + dataCarga() : ''}</p>
-        <p class="mini fraco" title="Versão do site">versão 2026-11-15 00:26 · e6e2003</p>
+        <p class="mini fraco" title="Versão do site">versão 2026-11-15 22:15 · 7903b44</p>
       </div>
     </div>
   </div></footer>`;
@@ -6063,6 +6113,7 @@ const MENU_ADMIN = [
   ['nucleos', 'Núcleos promotores'],
   ['rankings', 'Rankings'], ['importar', 'Importações'], ['maestro', 'Maestro'],
   ['banners', 'Banners'], ['analytics', 'Analytics'], ['identidade', 'Logo do app'],
+  ['menu-inferior', 'Menu inferior'],
   ['classificados', 'Classificados'],
   ['solicitacoes', 'Solicitações'], ['usuarios', 'Usuários e permissões'],
   ['auditoria', 'Auditoria'], ['relatorios', 'Relatórios']
@@ -6076,6 +6127,7 @@ function pgAdmin(el, r) {
     inscricoes: adInscricoes, ficha: adFicha, sumulas: adSumulas,
     sessoes: adSessoes, jurados: adJurados, cavalos: adCavalos, ginetes: adGinetes, nucleos: adNucleos, rankings: adRankings,
     importar: adImportar, maestro: adMaestro, banners: adBanners, analytics: adAnalytics,
+    'menu-inferior': adMenuInferior,
     identidade: adIdentidade,
     classificados: adClassificadosAdm, solicitacoes: adSolicitacoes,
     usuarios: adUsuarios, auditoria: adAuditoria, relatorios: adRelatorios
@@ -10473,6 +10525,177 @@ function fichaPendencias(f) {
 
 
 /* =====================================================================
+   ADMIN — Menu inferior (os 6 ícones do rodapé)
+
+   O dono escolhe, para cada uma das 6 posições: o ícone, o rótulo e o
+   destino. Salva em `S.config.menu` (que já vai para o servidor junto com
+   a configuração do portal) e a barra se refaz na hora — sem publicar.
+
+   Regra: o que a tela mostra é o que a barra mostra. A prévia usa a MESMA
+   função que desenha a barra pública (menuInferiorHTML), então não existe
+   divergência entre "como ficou no painel" e "como ficou no site".
+   ===================================================================== */
+
+function adMenuInferior() {
+  const itens = menuInferior();
+  const opcoesIcone = (atual) => Object.keys(ICONES_MENU).map(k =>
+    `<option value="${esc(k)}"${k === atual ? ' selected' : ''}>${esc(NOMES_ICONES[k] || k)}</option>`).join('');
+
+  /* destinos oferecidos: as telas que existem, mais "link externo" */
+  const telas = [
+    ['inicio', 'Início'], ['rankings', 'Rankings'], ['final', 'Final'],
+    ['provas', 'Provas'], ['credenciadoras', 'Credenciadoras'],
+    ['competidores', 'Competidores'], ['cavalos', 'Cavalos'],
+    ['meus-cavalos', 'Meus cavalos'], ['como-funciona', 'Como funciona'],
+    ['noticias', 'Notícias'], ['estatisticas', 'Estatísticas'],
+    ['jurados', 'Jurados'], ['genealogia', 'Genealogia'],
+    ['classificados', 'Classificados'], ['busca', 'Busca']
+  ];
+
+  return `
+  <div class="card">
+    <h3>Menu inferior</h3>
+    <p class="mini fraco" style="margin-top:-6px">A barra fica fixa no rodapé da tela do celular, em todas as páginas públicas.
+      São 6 posições: escolha o desenho, o nome que aparece embaixo e para onde o toque leva.
+      Deixar o destino vazio desliga o ícone sem tirar ele da barra.</p>
+
+    <div class="mt">
+      <div class="mini fraco" style="margin-bottom:6px">Prévia (é a barra de verdade)</div>
+      <div class="previa-menu">${menuInferiorHTML('') || '<span class="mini fraco">nenhum ícone ligado</span>'}</div>
+    </div>
+
+    <div class="mt">
+      ${itens.map((m, i) => `
+        <div class="card" style="padding:12px;margin-bottom:10px">
+          <div class="linha entre" style="align-items:center;gap:8px">
+            <span class="mini" style="font-weight:700">Posição ${i + 1}</span>
+            ${svgIcone(m.icone, 20)}
+          </div>
+          <div class="linha-form mt-sm">
+            <div class="campo"><label>Ícone</label>
+              <select id="mbIco${i}" onchange="menuInferiorPrevia()">${opcoesIcone(m.icone)}</select>
+            </div>
+            <div class="campo"><label>Nome embaixo do ícone</label>
+              <input id="mbRot${i}" maxlength="14" value="${esc(m.rotulo)}" placeholder="Até 14 letras"
+                     oninput="menuInferiorPrevia()"></div>
+          </div>
+          <div class="campo mt-sm"><label>Para onde leva</label>
+            <select id="mbDestSel${i}" onchange="menuInferiorDestinoMudou(${i})">
+              ${telas.map(([v, r]) => `<option value="${v}" ${m.destino === v ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+              <option value="__externo__" ${m.destino && !telas.some(t => t[0] === m.destino) ? 'selected' : ''}>Outro endereço (link externo)</option>
+              <option value="" ${!m.destino ? 'selected' : ''}>— desligado —</option>
+            </select>
+          </div>
+          <div class="campo mt-sm" id="mbExtBox${i}" style="display:none">
+            <label>Endereço completo</label>
+            <input id="mbDestTxt${i}" value="${esc(m.destino && !telas.some(t => t[0] === m.destino) ? m.destino : '')}"
+                   placeholder="https://..." oninput="menuInferiorPrevia()">
+          </div>
+          <label class="linha mt-sm" style="gap:6px;align-items:center;cursor:pointer">
+            <input type="checkbox" id="mbAtivo${i}" ${m.ativo ? 'checked' : ''} onchange="menuInferiorPrevia()">
+            <span class="mini">Mostrar este ícone na barra</span>
+          </label>
+        </div>`).join('')}
+    </div>
+
+    <div class="linha mt">
+      <button class="btn verde" onclick="menuInferiorSalvar()">Salvar menu</button>
+      <button class="btn sec" onclick="menuInferiorRestaurar()">Voltar ao padrão</button>
+    </div>
+    <div class="aviso aviso-info mt-sm">A barra aparece só no celular; em tela grande o menu do topo já dá conta.</div>
+  </div>`;
+}
+
+/* Abre/fecha o campo de endereço conforme a escolha do destino. */
+function menuInferiorDestinoMudou(i) {
+  const sel = $('#mbDestSel' + i);
+  const box = $('#mbExtBox' + i);
+  if (sel && box) box.style.display = sel.value === '__externo__' ? '' : 'none';
+  menuInferiorPrevia();
+}
+
+/* Lê o formulário inteiro e desenha a prévia com a MESMA função da barra. */
+function menuInferiorLido() {
+  const itens = [];
+  for (let i = 0; i < 6; i++) {
+    const sel = $('#mbDestSel' + i);
+    let destino = sel ? sel.value : '';
+    if (destino === '__externo__') destino = (($('#mbDestTxt' + i) || {}).value || '').trim();
+    itens.push({
+      id: 'mn-' + (i + 1),
+      icone: (($('#mbIco' + i) || {}).value) || 'generico',
+      rotulo: ((($('#mbRot' + i) || {}).value) || '').trim().slice(0, 14),
+      destino,
+      ativo: !!($('#mbAtivo' + i) || {}).checked
+    });
+  }
+  return itens;
+}
+
+function menuInferiorPrevia() {
+  const alvo = document.querySelector('.previa-menu');
+  if (!alvo) return;
+  /* monta a prévia sem gravar nada: usa a mesma barra, com os dados da tela */
+  const guardado = S.config ? S.config.menu : null;
+  try {
+    if (!S.config) S.config = {};
+    S.config.menu = menuInferiorLido();
+    alvo.innerHTML = menuInferiorHTML('') || '<span class="mini fraco">nenhum ícone ligado</span>';
+  } finally {
+    if (S.config) S.config.menu = guardado;
+  }
+}
+
+function menuInferiorSalvar() {
+  const itens = menuInferiorLido();
+
+  /* endereço externo vazio = posição sem destino; avisa em vez de gravar mudo */
+  const semDestino = itens.filter(x => x.ativo && !x.destino).length;
+  if (semDestino) {
+    toast(semDestino + ' ícone(s) sem destino. Escolha a tela ou desligue o ícone.', 'erro');
+    return;
+  }
+
+  S.config = S.config || {};
+  S.config.menu = itens;
+  Motor.auditar('Menu inferior', 'config.menu', '',
+    itens.map(x => x.rotulo + '→' + x.destino).join(', '),
+    'Painel', 'Barra de 6 ícones');
+
+  const fim = (msg) => {
+    toast(msg);
+    montarMenuInferior(ROTA_ATUAL);
+    render();
+  };
+
+  if (typeof apiDisponivel === 'function' && apiDisponivel() && API.token) {
+    salvar();
+    sincronizarDados(true)
+      .then(() => fim('Menu salvo no servidor.'))
+      .catch(e => toast('Gravado neste navegador, mas o servidor não confirmou: ' + e.message, 'erro'));
+    return;
+  }
+  salvar();
+  fim('Menu salvo neste navegador.');
+}
+
+function menuInferiorRestaurar() {
+  if (!S.config) S.config = {};
+  S.config.menu = MENU_PADRAO.map((m, i) => ({ id: 'mn-' + (i + 1), ...m, ativo: true }));
+  const fim = (msg) => { toast(msg); montarMenuInferior(ROTA_ATUAL); render(); };
+  if (typeof apiDisponivel === 'function' && apiDisponivel() && API.token) {
+    salvar();
+    sincronizarDados(true)
+      .then(() => fim('Menu do padrão restaurado.'))
+      .catch(e => toast('Restaurado aqui, servidor não confirmou: ' + e.message, 'erro'));
+    return;
+  }
+  salvar();
+  fim('Menu do padrão restaurado.');
+}
+
+
+/* =====================================================================
    BOOT — inicialização, PWA, atalhos de teclado
    ===================================================================== */
 
@@ -10820,6 +11043,143 @@ function pgComoFunciona(el) {
     <div class="aviso aviso-info mt-sm">Este é um portal informativo. Os dados com fé pública são os
       publicados pela Associação no site oficial.</div>
   </div>`;
+}
+
+
+/* =====================================================================
+   MENU INFERIOR FIXO — 6 ícones, controlados pelo painel.
+
+   A barra fica presa no rodapé da tela em toda página pública (no celular é
+   o jeito de navegar sem abrir o menu hambúrguer). Cada ícone é uma entrada
+   de `S.config.menu`, editável em Administração > Menu inferior:
+
+     { id, rotulo, icone, destino, ativo }
+
+   - `destino` aceita rota interna ('rankings'), URL completa ou página do
+     próprio portal. Vazio = ícone desligado, sem sair da barra.
+   - `icone` é uma chave de ICONES_MENU. Sem chave válida, cai no genérico.
+   - Sem configuração salva, a barra já nasce com os 6 destinos óbvios: a
+     pessoa não vê um recurso vazio esperando ser configurado.
+   ===================================================================== */
+
+const ICONES_MENU = {
+  inicio: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V21h13V9.5"/>',
+  rankings: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  final: '<path d="M8 21h8M12 17v4"/><path d="M7 3h10v4a5 5 0 0 1-10 0z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/>',
+  provas: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/>',
+  credenciadoras: '<path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  cavalos: '<path d="M5 20c0-5 2-8 5-9.5C9 8 10 5 13 4c0 2 1.5 3 3 3.5 2 .7 3 2.5 3 5"/><path d="M5 20h14"/><circle cx="7.5" cy="13.5" r="0.8"/>',
+  competidores: '<circle cx="12" cy="8" r="3.5"/><path d="M4.5 21c0-4.1 3.4-6.5 7.5-6.5s7.5 2.4 7.5 6.5"/>',
+  jurados: '<circle cx="12" cy="7" r="3"/><path d="M9 21v-5l3-2 3 2v5"/><path d="M4 10l2-4M20 10l-2-4"/>',
+  noticias: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M7 9h6M7 13h6M7 17h4M17 9v8"/>',
+  estatisticas: '<path d="M4 19V9M10 19V5M16 19v-6M22 19H2"/><circle cx="10" cy="5" r="1.2"/>',
+  'meus-cavalos': '<path d="M4 6h16v12H4z"/><path d="M8 10h8M8 14h5"/>',
+  'como-funciona': '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.3c-.7.4-1.1 1-1.1 1.8v.4"/><path d="M12 17.2v.1"/>',
+  busca: '<circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/>',
+  telefone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/>',
+  generico: '<circle cx="12" cy="12" r="9"/><path d="M12 8v.1M12 11v5"/>'
+};
+
+/* Rótulo de cada ícone no painel, para ele escolher pelo nome do desenho. */
+const NOMES_ICONES = {
+  inicio: 'Início (casa)', rankings: 'Rankings (gráfico)', final: 'Final (troféu)',
+  provas: 'Provas (calendário)', credenciadoras: 'Credenciadoras (pino)',
+  cavalos: 'Cavalos', competidores: 'Competidores (pessoa)',
+  jurados: 'Jurados', noticias: 'Notícias (jornal)',
+  estatisticas: 'Estatísticas (barras)', 'meus-cavalos': 'Meus cavalos (ficha)',
+  'como-funciona': 'Como funciona (interrogação)', busca: 'Busca (lupa)',
+  telefone: 'Telefone', link: 'Link externo', generico: 'Genérico (círculo)'
+};
+
+/* Os 6 que aparecem antes de alguém configurar. São os destinos que a
+   própria operação usa; nenhum é invenção — todos são telas que existem. */
+const MENU_PADRAO = [
+  { rotulo: 'Início', icone: 'inicio', destino: 'inicio' },
+  { rotulo: 'Rankings', icone: 'rankings', destino: 'rankings' },
+  { rotulo: 'Provas', icone: 'provas', destino: 'provas' },
+  { rotulo: 'Cavalos', icone: 'cavalos', destino: 'cavalos' },
+  { rotulo: 'Final', icone: 'final', destino: 'final' },
+  { rotulo: 'Notícias', icone: 'noticias', destino: 'noticias' }
+];
+
+function svgIcone(chave, tam) {
+  const caminho = ICONES_MENU[chave] || ICONES_MENU.generico;
+  const t = tam || 22;
+  return `<svg viewBox="0 0 24 24" width="${t}" height="${t}" fill="none"
+    stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+    stroke-linejoin="round" aria-hidden="true">${caminho}</svg>`;
+}
+
+/* ---------- a configuração, sempre completa ----------
+   A barra não pode quebrar por causa de config antiga: campo ausente é
+   preenchido, item inválido é descartado. Sempre devolve 6 posições. */
+function menuInferior() {
+  const salvo = (S.config && Array.isArray(S.config.menu)) ? S.config.menu : null;
+  const base = salvo && salvo.length ? salvo : MENU_PADRAO;
+  const saida = [];
+  for (let i = 0; i < 6; i++) {
+    const m = base[i] || {};
+    saida.push({
+      id: m.id || 'mn-' + (i + 1),
+      rotulo: (m.rotulo != null ? String(m.rotulo) : (MENU_PADRAO[i] ? MENU_PADRAO[i].rotulo : '')).slice(0, 14),
+      icone: ICONES_MENU[m.icone] ? m.icone : (MENU_PADRAO[i] ? MENU_PADRAO[i].icone : 'generico'),
+      destino: m.destino != null ? String(m.destino) : (MENU_PADRAO[i] ? MENU_PADRAO[i].destino : ''),
+      ativo: m.ativo !== false
+    });
+  }
+  return saida;
+}
+
+/* Um destino é interno quando não tem esquema (http, tel:, mailto:). */
+function destinoExterno(destino) {
+  return /^[a-z]+:/i.test(destino || '') || /^\/\//.test(destino || '');
+}
+
+function rotuloDaRota(destino) {
+  const limpo = String(destino || '').replace(/^#?\/?/, '').split('?')[0];
+  return limpo || 'inicio';
+}
+
+/* ---------- a barra ---------- */
+function menuInferiorHTML(rotaAtual) {
+  const itens = menuInferior().filter(m => m.ativo && (m.destino || m.rotulo));
+  if (!itens.length) return '';
+
+  const links = itens.map(m => {
+    const externo = destinoExterno(m.destino);
+    const dentro = !externo && rotuloDaRota(m.destino) === rotaAtual;
+    const href = externo ? m.destino : '#/' + String(m.destino || 'inicio').replace(/^#?\/?/, '');
+    const extras = externo ? ' target="_blank" rel="noopener"' : '';
+    return `<a class="mb-item${dentro ? ' on' : ''}" href="${esc(href)}"${extras}
+      aria-label="${esc(m.rotulo)}"${dentro ? ' aria-current="page"' : ''}>
+      <span class="mb-ico">${svgIcone(m.icone)}</span>
+      <span class="mb-rot">${esc(m.rotulo)}</span>
+    </a>`;
+  }).join('');
+
+  return `<nav class="menu-baixo" aria-label="Navegação principal">${links}</nav>`;
+}
+
+/* Coloca a barra no documento e ajusta o rodapé para ela não cobrir conteúdo.
+   Chamada no fim de cada render (a barra acompanha a troca de página). */
+function montarMenuInferior(rota) {
+  try {
+    let nav = document.querySelector('.menu-baixo');
+    const html = menuInferiorHTML(rota);
+    if (!html) { if (nav) nav.remove(); document.body.classList.remove('com-menu-baixo'); return; }
+    if (!nav) {
+      const d = document.createElement('div');
+      d.innerHTML = html;
+      nav = d.firstElementChild;
+      document.body.appendChild(nav);
+    } else {
+      const d = document.createElement('div');
+      d.innerHTML = html;
+      nav.replaceWith(d.firstElementChild);
+    }
+    document.body.classList.add('com-menu-baixo');
+  } catch (e) { /* visualizador restrito não pode impedir a tela */ }
 }
 
 </script>
